@@ -1,7 +1,7 @@
 {
   "name": "@orb44/cli",
-  "version": "0.1.12",
-  "description": "Orb44 Watch satellite \u2014 inside pulse from your VPS (load, listeners, hardening). Pairs with the street snapshot; the cabinet never runs commands on the machine.",
+  "version": "0.1.13",
+  "description": "Orb44 Watch satellite — inside pulse from your VPS (load, listeners, hardening). Pairs with the street snapshot; the cabinet never runs commands on the machine.",
   "type": "module",
   "bin": {
     "orb44": "bin/orb44.mjs"

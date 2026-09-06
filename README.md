@@ -19,17 +19,17 @@ Orb44’s street view sees what a passerby sees. Bind addresses on `127.0.0.1`, 
 
 ```bash
 # Node 18+ · Linux or macOS
-npx @orb44/cli@0.1.12 login --url https://app.orb44.com
+npx @orb44/cli@0.1.13 login --url https://app.orb44.com
 ```
 
 Open the printed link while signed into the cabinet, confirm the domain, then optionally install the systemd daemon (default: no).
 
 ```bash
-npx @orb44/cli@0.1.12 status
-npx @orb44/cli@0.1.12 pulse
-npx @orb44/cli@0.1.12 install   # daemon? (default yes) · logs? (default no)
+npx @orb44/cli@0.1.13 status
+npx @orb44/cli@0.1.13 pulse
+npx @orb44/cli@0.1.13 install   # daemon? (default yes) · logs? (default no)
 orb44 update                    # after global install
-npx @orb44/cli@0.1.12 logout
+npx @orb44/cli@0.1.13 logout
 ```
 
 Do **not** run bare `npx @orb44/cli` — caches go stale. Pin the version or use `orb44` after install.
