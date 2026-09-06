@@ -1,7 +1,7 @@
 {
   "name": "@orb44/cli",
   "version": "0.1.12",
-  "description": "Orb44: street snapshot of your site. This CLI is the Watch satellite — pulse from the host (load, listeners, hardening). The cabinet does not run commands on the machine.",
+  "description": "Orb44 Watch satellite \u2014 inside pulse from your VPS (load, listeners, hardening). Pairs with the street snapshot; the cabinet never runs commands on the machine.",
   "type": "module",
   "bin": {
     "orb44": "bin/orb44.mjs"
@@ -33,7 +33,8 @@
     "satellite",
     "pulse",
     "perimeter",
-    "security"
+    "security",
+    "cli"
   ],
   "license": "MIT",
   "publishConfig": {
