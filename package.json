@@ -21,11 +21,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ephemeral172/satellite.git"
+    "url": "git+https://github.com/OrbSec/satellite.git"
   },
-  "homepage": "https://github.com/ephemeral172/satellite#readme",
+  "homepage": "https://github.com/OrbSec/satellite#readme",
   "bugs": {
-    "url": "https://github.com/ephemeral172/satellite/issues"
+    "url": "https://github.com/OrbSec/satellite/issues"
   },
   "keywords": [
     "orb44",
