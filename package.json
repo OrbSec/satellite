@@ -1,0 +1,42 @@
+{
+  "name": "@orb44/cli",
+  "version": "0.1.12",
+  "description": "Orb44: street snapshot of your site. This CLI is the Watch satellite — pulse from the host (load, listeners, hardening). The cabinet does not run commands on the machine.",
+  "type": "module",
+  "bin": {
+    "orb44": "bin/orb44.mjs"
+  },
+  "files": [
+    "bin/orb44.mjs",
+    "server/pulse.mjs",
+    "server/sat-i18n.mjs",
+    "server/cli-menu.mjs",
+    "server/sat-local.mjs",
+    "server/sat-http.mjs",
+    "server/sat-update.mjs",
+    "server/sat-logs.mjs"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ephemeral172/satellite.git"
+  },
+  "homepage": "https://github.com/ephemeral172/satellite#readme",
+  "bugs": {
+    "url": "https://github.com/ephemeral172/satellite/issues"
+  },
+  "keywords": [
+    "orb44",
+    "watch",
+    "satellite",
+    "pulse",
+    "perimeter",
+    "security"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

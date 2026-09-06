@@ -1,0 +1,84 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.12)"
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Pack
+        id: pack
+        run: |
+          set -euo pipefail
+          TGZ=$(npm pack | tail -1)
+          echo "tgz=$TGZ" >> "$GITHUB_OUTPUT"
+          sha256sum "$TGZ" | tee SHA256SUMS
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign tarball (keyless OIDC)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          TGZ="${{ steps.pack.outputs.tgz }}"
+          cosign sign-blob --yes \
+            --bundle "${TGZ}.cosign.bundle" \
+            "$TGZ"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TGZ="${{ steps.pack.outputs.tgz }}"
+          NOTES="$(cat <<EOF
+          Orb44 Watch satellite (@orb44/cli).
+
+          Install:
+          \`\`\`bash
+          npx @orb44/cli@${TAG#v} login --url https://app.orb44.com
+          \`\`\`
+
+          Verify Cosign bundle (keyless):
+          \`\`\`bash
+          cosign verify-blob \\
+            --bundle ${TGZ}.cosign.bundle \\
+            --certificate-identity-regexp 'https://github.com/.*/satellite/\\.github/workflows/release\\.yml@.*' \\
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \\
+            ${TGZ}
+          \`\`\`
+
+          Product: https://orb44.com · Cabinet: https://app.orb44.com
+          EOF
+          )"
+          gh release create "$TAG" "$TGZ" "${TGZ}.cosign.bundle" SHA256SUMS \
+            --title "$TAG" \
+            --notes "$NOTES" \
+            --verify-tag || \
+          gh release create "$TAG" "$TGZ" "${TGZ}.cosign.bundle" SHA256SUMS \
+            --title "$TAG" \
+            --notes "$NOTES"
