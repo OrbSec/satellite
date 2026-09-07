@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
+  <rect width="800" height="520" fill="#eeeaf6"/>
+  <rect x="48" y="48" width="704" height="424" rx="24" fill="#fff" stroke="rgba(44,20,84,0.08)"/>
+  <text x="80" y="100" font-family="Inter, ui-sans-serif, system-ui" font-size="13" font-weight="600" fill="#94a3b8" letter-spacing="1.4">LISTENERS</text>
+  <circle cx="88" cy="160" r="6" fill="#f43f5e"/>
+  <text x="112" y="156" font-family="ui-monospace, SFMono-Regular, Menlo" font-size="14" fill="#94a3b8">5432</text>
+  <text x="176" y="156" font-family="Inter, ui-sans-serif, system-ui" font-size="18" font-weight="600" fill="#2c1454">Postgres</text>
+  <text x="400" y="156" font-family="Inter, ui-sans-serif, system-ui" font-size="15" fill="#64748b">0.0.0.0  bind the outside cannot see</text>
+  <line x1="80" y1="196" x2="720" y2="196" stroke="#f1f5f9"/>
+  <circle cx="88" cy="244" r="6" fill="#fbbf24"/>
+  <text x="112" y="240" font-family="ui-monospace, SFMono-Regular, Menlo" font-size="14" fill="#94a3b8">6379</text>
+  <text x="176" y="240" font-family="Inter, ui-sans-serif, system-ui" font-size="18" font-weight="600" fill="#2c1454">Redis</text>
+  <text x="400" y="240" font-family="Inter, ui-sans-serif, system-ui" font-size="15" fill="#64748b">loopback  firewall still holds it</text>
+  <line x1="80" y1="280" x2="720" y2="280" stroke="#f1f5f9"/>
+  <circle cx="88" cy="328" r="6" fill="#f43f5e"/>
+  <text x="112" y="324" font-family="ui-monospace, SFMono-Regular, Menlo" font-size="14" fill="#94a3b8">22</text>
+  <text x="176" y="324" font-family="Inter, ui-sans-serif, system-ui" font-size="18" font-weight="600" fill="#2c1454">SSH</text>
+  <text x="400" y="324" font-family="Inter, ui-sans-serif, system-ui" font-size="15" fill="#64748b">password login is on</text>
+  <text x="80" y="412" font-family="Inter, ui-sans-serif, system-ui" font-size="15" fill="#64748b">No dump. No login. Bind and facts only.</text>
+</svg>

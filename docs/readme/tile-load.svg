@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
+  <rect width="800" height="520" fill="#eeeaf6"/>
+  <rect x="48" y="80" width="332" height="360" rx="24" fill="#fff" stroke="rgba(44,20,84,0.08)"/>
+  <rect x="420" y="80" width="332" height="360" rx="24" fill="#fff" stroke="rgba(44,20,84,0.08)"/>
+  <text x="80" y="140" font-family="Inter, ui-sans-serif, system-ui" font-size="15" fill="#64748b">Machine CPU</text>
+  <text x="80" y="220" font-family="Inter, ui-sans-serif, system-ui" font-size="56" font-weight="700" fill="#e11d48">78%</text>
+  <rect x="80" y="260" width="268" height="8" rx="4" fill="#ffe4e6"/>
+  <rect x="80" y="260" width="210" height="8" rx="4" fill="#f43f5e"/>
+  <text x="80" y="320" font-family="Inter, ui-sans-serif, system-ui" font-size="14" fill="#94a3b8">Load the outside never sees</text>
+  <text x="452" y="140" font-family="Inter, ui-sans-serif, system-ui" font-size="15" fill="#64748b">Storefront from the outside</text>
+  <text x="452" y="220" font-family="Inter, ui-sans-serif, system-ui" font-size="56" font-weight="700" fill="#2c1454">4%</text>
+  <rect x="452" y="260" width="268" height="8" rx="4" fill="#e2e8f0"/>
+  <rect x="452" y="260" width="28" height="8" rx="4" fill="#94a3b8"/>
+  <text x="452" y="320" font-family="Inter, ui-sans-serif, system-ui" font-size="14" fill="#94a3b8">Shop looks quiet</text>
+</svg>

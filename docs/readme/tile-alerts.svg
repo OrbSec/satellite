@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="520" viewBox="0 0 800 520">
+  <rect width="800" height="520" fill="#eeeaf6"/>
+  <rect x="48" y="72" width="704" height="168" rx="22" fill="#fff" stroke="rgba(44,20,84,0.08)"/>
+  <circle cx="108" cy="156" r="28" fill="#2AABEE" opacity="0.14"/>
+  <path d="M96 156l28-12-22 16 2 8 6-6" fill="#2AABEE"/>
+  <text x="156" y="140" font-family="Inter, ui-sans-serif, system-ui" font-size="18" font-weight="600" fill="#2c1454">Telegram</text>
+  <text x="620" y="140" font-family="Inter, ui-sans-serif, system-ui" font-size="13" fill="#94a3b8">Watch · 2m</text>
+  <text x="156" y="176" font-family="Inter, ui-sans-serif, system-ui" font-size="16" fill="#64748b">SSH password stuffing · the machine is under load.</text>
+  <rect x="48" y="268" width="704" height="168" rx="22" fill="#fff" stroke="rgba(44,20,84,0.08)"/>
+  <circle cx="108" cy="352" r="28" fill="#E01E5A" opacity="0.12"/>
+  <text x="97" y="359" font-family="Inter, ui-sans-serif, system-ui" font-size="22" font-weight="700" fill="#E01E5A">#</text>
+  <text x="156" y="336" font-family="Inter, ui-sans-serif, system-ui" font-size="18" font-weight="600" fill="#2c1454">Slack</text>
+  <text x="620" y="336" font-family="Inter, ui-sans-serif, system-ui" font-size="13" fill="#94a3b8">Watch · 2m</text>
+  <text x="156" y="372" font-family="Inter, ui-sans-serif, system-ui" font-size="16" fill="#64748b">Postgres is listening on 0.0.0.0. Machine IP ` DNS.</text>
+</svg>
