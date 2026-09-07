@@ -27,6 +27,23 @@ export function sanitizeRuntime(raw = {}) {
   };
 }
 
+export function isSatLogNoise(text) {
+  return /kex_exchange_identification|banner exchange|maxstartups|оборвали на рукопожатии|типичный шум/i.test(
+    String(text || "")
+  );
+}
+
+export function classifySatErrorText(text) {
+  const s = String(text || "");
+  if (isSatLogNoise(s)) {
+    return {
+      kind: "ssh-kex",
+      text: "SSH оборвали на рукопожатии — типичный шум (fail2ban, MaxStartups или баннер). Это не ошибка сайта.",
+    };
+  }
+  return { kind: null, text: s };
+}
+
 export function redactLogLine(line) {
   let s = String(line || "").replace(/\s+/g, " ").trim();
   if (!s) return "";
@@ -40,18 +57,22 @@ export function sanitizeErrors(list) {
   const seen = new Set();
   for (const e of Array.isArray(list) ? list : []) {
     const source = ERROR_SOURCES.has(e?.source) ? e.source : null;
-    const text = redactLogLine(e?.text);
-    const name = String(e?.name || "")
-      .replace(/[^\w./:@-]/g, "")
-      .slice(0, 48);
+    if (isSatLogNoise(e?.text)) continue;
+    const classified = classifySatErrorText(e?.text);
+    const text = classified.kind ? classified.text : redactLogLine(e?.text);
+    const name = classified.kind === "ssh-kex"
+      ? "sshd"
+      : String(e?.name || "")
+          .replace(/[^\w./:@-]/g, "")
+          .slice(0, 48);
     if (!source || !text || text === "[redacted]") continue;
-    const key = `${source}:${name}:${text}`;
+    const key = classified.kind ? `${source}:${classified.kind}` : `${source}:${name}:${text}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({
       source,
       name: name || source,
-      level: e.level === "warn" ? "warn" : "error",
+      level: classified.kind === "ssh-kex" ? "warn" : e.level === "warn" ? "warn" : "error",
       text,
     });
     if (out.length >= 8) break;
@@ -233,6 +254,25 @@ function pickState(probed, inferred) {
   return inferred || "absent";
 }
 
+export function parseSshAuthFails(text) {
+  let failed = 0;
+  let invalid = 0;
+  for (const line of String(text || "").split("\n")) {
+    if (/Failed password|authentication failure|Failed keyboard-interactive/i.test(line)) failed += 1;
+    else if (/Invalid user|Failed none/i.test(line)) invalid += 1;
+  }
+  return { failed, invalid };
+}
+
+function collectSshFails() {
+  const since = ["--since", "20 min ago", "--no-pager", "-o", "cat", "-q"];
+  let r = tryCmd("journalctl", ["-u", "sshd", ...since]);
+  if (!r.ok || !(r.text || "").trim()) r = tryCmd("journalctl", ["-u", "ssh", ...since]);
+  if (r.denied || r.absent || !r.ok) return null;
+  const c = parseSshAuthFails(r.text);
+  return { failed: c.failed, invalid: c.invalid, windowMin: 20 };
+}
+
 export function collectRuntime({ listen = [], top = [], grants } = {}) {
   const g = sanitizeGrants(grants);
   const inferred = inferRuntime(listen, top);
@@ -241,6 +281,7 @@ export function collectRuntime({ listen = [], top = [], grants } = {}) {
     return {
       runtime: sanitizeRuntime({ ...inferred, daemon, journal: "absent" }),
       errors: [],
+      sshFails: null,
     };
   }
   const journal = collectJournal();
@@ -256,5 +297,6 @@ export function collectRuntime({ listen = [], top = [], grants } = {}) {
       nginx: pickState(nginx.state, inferred.nginx),
     }),
     errors: sanitizeErrors([...journal.errors, ...docker.errors, ...kube.errors, ...nginx.errors]),
+    sshFails: collectSshFails(),
   };
 }

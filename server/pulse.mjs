@@ -3,7 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import { execFileSync } from "node:child_process";
 import { t } from "./sat-i18n.mjs";
-import { collectRuntime, sanitizeErrors, sanitizeGrants, sanitizeRuntime } from "./sat-logs.mjs";
+import { collectRuntime, sanitizeErrors, sanitizeGrants, sanitizeRuntime, isSatLogNoise } from "./sat-logs.mjs";
 
 const COMM_RE = /[^a-zA-Z0-9._+-]/g;
 
@@ -311,6 +311,9 @@ export function sanitizePulse(raw = {}) {
     firewall: ["ufw", "nftables", "firewalld", "iptables"].includes(fw) ? fw : null,
     fail2ban: ["fail2ban", "sshguard"].includes(ban) ? ban : null,
     fail2banBanned: Math.max(0, Math.min(99999, Number(raw.hardening?.fail2banBanned) || 0)),
+    fail2banFailed: Math.max(0, Math.min(99999, Number(raw.hardening?.fail2banFailed) || 0)),
+    fail2banJails: sanitizeFail2banJails(raw.hardening?.fail2banJails),
+    fail2banReadable: tri(raw.hardening?.fail2banReadable),
     updates: Boolean(raw.hardening?.updates),
     sshPassword: tri(raw.hardening?.sshPassword),
     sshRoot: tri(raw.hardening?.sshRoot),
@@ -345,8 +348,81 @@ export function sanitizePulse(raw = {}) {
     grants: sanitizeGrants(raw.grants),
     runtime: sanitizeRuntime(raw.runtime),
     errors: sanitizeErrors(raw.errors),
+    apps: sanitizeApps(raw.apps),
   };
   return { ...base, gradeInside: gradeInside(base) };
+}
+
+const JAIL_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,40}$/;
+const CMS_KINDS = new Set(["wordpress", "drupal", "bitrix", "joomla"]);
+const MAIL_KINDS = new Set(["postfix", "exim", "sendmail"]);
+const VPN_KINDS = new Set(["wireguard", "openvpn", "ipsec", "pptp", "l2tp"]);
+
+function sanitizePortList(raw) {
+  return [...new Set((Array.isArray(raw) ? raw : []).map((n) => Number(n)).filter((n) => n > 0 && n < 65536))].slice(0, 8);
+}
+
+function sanitizeFail2banJails(raw) {
+  const out = [];
+  const seen = new Set();
+  for (const row of Array.isArray(raw) ? raw : []) {
+    const name = String(row?.name || "");
+    if (!JAIL_NAME_RE.test(name) || seen.has(name)) continue;
+    seen.add(name);
+    out.push({
+      name,
+      banned: Math.max(0, Math.min(99999, Number(row.banned) || 0)),
+      failed: Math.max(0, Math.min(99999, Number(row.failed) || 0)),
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+export function sanitizeApps(raw = {}) {
+  const mail = raw?.mail;
+  const vpn = raw?.vpn;
+  const ssh = raw?.sshFails;
+  const cms = [...new Set((Array.isArray(raw?.cms) ? raw.cms : []).map((s) => String(s).toLowerCase()).filter((s) => CMS_KINDS.has(s)))].slice(
+    0,
+    4
+  );
+  const apps = {
+    cms,
+    mail:
+      mail && (mail.kind || mail.world || mail.queue != null || mail.openRelay != null)
+        ? {
+            kind: MAIL_KINDS.has(mail.kind) ? mail.kind : null,
+            world: Boolean(mail.world),
+            ports: sanitizePortList(mail.ports),
+            queue: mail.queue == null ? null : Math.max(0, Math.min(999999, Number(mail.queue) || 0)),
+            openRelay: mail.openRelay === true || mail.openRelay === false ? mail.openRelay : null,
+          }
+        : null,
+    vpn:
+      vpn && (vpn.kind || vpn.world || vpn.peers != null || (Array.isArray(vpn.ifaces) && vpn.ifaces.length))
+        ? {
+            kind: VPN_KINDS.has(vpn.kind) ? vpn.kind : null,
+            world: Boolean(vpn.world),
+            ports: sanitizePortList(vpn.ports),
+            ifaces: (Array.isArray(vpn.ifaces) ? vpn.ifaces : [])
+              .map((s) => String(s).replace(/[^\w.-]/g, "").slice(0, 16))
+              .filter(Boolean)
+              .slice(0, 6),
+            peers: vpn.peers == null ? null : Math.max(0, Math.min(9999, Number(vpn.peers) || 0)),
+          }
+        : null,
+    sshFails:
+      ssh && (ssh.failed != null || ssh.invalid != null)
+        ? {
+            failed: Math.max(0, Math.min(99999, Number(ssh.failed) || 0)),
+            invalid: Math.max(0, Math.min(99999, Number(ssh.invalid) || 0)),
+            windowMin: 20,
+          }
+        : null,
+  };
+  if (!apps.cms.length && !apps.mail && !apps.vpn && !apps.sshFails) return { cms: [], mail: null, vpn: null, sshFails: null };
+  return apps;
 }
 
 function sanitizeCliVersion(raw) {
@@ -361,13 +437,30 @@ const ADMIN_PORTS = new Set([
   11434, 6333, 19530, 9229, 9222,
 ]);
 
+const MAIL_PORTS = new Set([25, 465, 587, 993, 995, 110, 143]);
+const VPN_OK_PORTS = new Set([1194, 500, 4500, 51820]);
+const VPN_WEAK_PORTS = new Set([1701, 1723]);
+
 const SERVICE_NAME = {
   22: "SSH",
+  25: "SMTP",
   53: "DNS",
   80: "HTTP",
+  110: "POP3",
+  143: "IMAP",
   443: "HTTPS",
+  465: "SMTPS",
+  500: "IKE",
+  587: "Submission",
+  993: "IMAPS",
+  995: "POP3S",
   1080: "SOCKS",
+  1194: "OpenVPN",
+  1701: "L2TP",
+  1723: "PPTP",
   2019: "Caddy admin",
+  4500: "IPsec NAT-T",
+  51820: "WireGuard",
   2375: "Docker",
   2376: "Docker TLS",
   2379: "etcd",
@@ -655,11 +748,20 @@ export function collectHardening(listen = []) {
   }
   let fail2ban = null;
   let fail2banBanned = 0;
+  let fail2banFailed = 0;
+  let fail2banJails = [];
+  let fail2banReadable = null;
   if (runOk("systemctl", ["is-active", "fail2ban"])) fail2ban = "fail2ban";
   else if (runOk("systemctl", ["is-active", "sshguard"])) fail2ban = "sshguard";
   if (fail2ban === "fail2ban") {
-    const jail = runOut("fail2ban-client", ["status", "sshd"]) || runOut("fail2ban-client", ["status"]);
-    fail2banBanned = parseFail2banJail(jail).banned;
+    const got = collectFail2banJails();
+    fail2banReadable = Boolean(got.readable);
+    fail2banJails = got.jails || [];
+    const sshd = fail2banJails.find((j) => j.name === "sshd");
+    if (sshd) {
+      fail2banBanned = Number(sshd.banned) || 0;
+      fail2banFailed = Number(sshd.failed) || 0;
+    }
   }
   const updates = runOk("systemctl", ["is-active", "unattended-upgrades"]) || fs.existsSync("/etc/apt/apt.conf.d/20auto-upgrades");
   const ssh = parseSshdT(runOut("sshd", ["-T"]) || runOut("/usr/sbin/sshd", ["-T"]));
@@ -689,6 +791,9 @@ export function collectHardening(listen = []) {
     firewall,
     fail2ban,
     fail2banBanned,
+    fail2banFailed,
+    fail2banJails,
+    fail2banReadable,
     updates: Boolean(updates),
     ...ssh,
     sshWorld,
@@ -707,6 +812,171 @@ export function parseFail2banJail(text) {
   return {
     banned: banned ? Number(banned[1]) : 0,
     failed: failed ? Number(failed[1]) : 0,
+  };
+}
+
+export function parseFail2banJailList(text) {
+  const m = /Jail list:\s*([^\n]+)/i.exec(String(text || ""));
+  if (!m) return [];
+  return m[1]
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => JAIL_NAME_RE.test(s))
+    .slice(0, 10);
+}
+
+const FAIL2BAN_JAIL_HINT = /ssh|mail|postfix|dovecot|exim|sasl|nginx|apache|http|wordpress|recidive|named/i;
+
+function collectFail2banJails() {
+  const listText = runOut("fail2ban-client", ["status"]);
+  const names = parseFail2banJailList(listText);
+  if (!names.length && !/Jail list:/i.test(listText)) return { readable: false, jails: [] };
+  const hinted = names.filter((n) => FAIL2BAN_JAIL_HINT.test(n));
+  const pick = (hinted.length ? hinted : names).slice(0, 8);
+  if (!pick.length) return { readable: true, jails: [] };
+  return {
+    readable: true,
+    jails: pick.map((name) => ({ name, ...parseFail2banJail(runOut("fail2ban-client", ["status", name])) })),
+  };
+}
+
+export function parseMailqCount(text) {
+  const raw = String(text || "").trim();
+  if (!raw || /mail queue is empty|no mail in queue|queue is empty/i.test(raw)) return 0;
+  const req = /(?:in\s+)?(\d+)\s+Requests?/i.exec(raw);
+  if (req) return Number(req[1]);
+  if (/^\d+$/.test(raw.split("\n").pop().trim())) return Number(raw.split("\n").pop().trim());
+  return null;
+}
+
+export function parsePostconfRelay(text) {
+  const t = String(text || "");
+  const line = (key) => {
+    const m = new RegExp(`(?:^|\\n)${key}\\s*=\\s*([^\\n]+)`, "i").exec(t);
+    return m ? m[1].trim() : "";
+  };
+  const nets = line("mynetworks") || t;
+  if (/\b0\.0\.0\.0\/0\b|\b::\/0\b/.test(nets)) return true;
+  return false;
+}
+
+export function parseWgInterfaces(text) {
+  return String(text || "")
+    .trim()
+    .split(/\s+/)
+    .map((s) => s.replace(/[^\w.-]/g, "").slice(0, 16))
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+export function parseWgPeerCount(text) {
+  return String(text || "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^[0-9a-fA-F]{40,}$/.test(l)).length;
+}
+
+const CMS_PROBES = [
+  ["/var/www/html/wp-includes/version.php", "wordpress"],
+  ["/var/www/wordpress/wp-includes/version.php", "wordpress"],
+  ["/var/www/html/wp-includes", "wordpress"],
+  ["/var/www/html/core/lib/Drupal.php", "drupal"],
+  ["/var/www/html/bitrix/modules", "bitrix"],
+  ["/home/bitrix/www/bitrix/modules", "bitrix"],
+  ["/var/www/html/administrator/manifests/files/joomla.xml", "joomla"],
+];
+
+export function inferCmsOnDisk(exists = (p) => fs.existsSync(p)) {
+  const hit = new Set();
+  for (const [file, kind] of CMS_PROBES) {
+    try {
+      if (exists(file)) hit.add(kind);
+    } catch {
+      /* no access */
+    }
+  }
+  return [...hit];
+}
+
+function listenWorldPorts(listen, ports) {
+  return [...new Set((listen || []).filter((r) => exposed(r.addr) && ports.has(r.port)).map((r) => r.port))];
+}
+
+function commHay(listen = [], top = []) {
+  return [...listen, ...top].map((r) => String(r.comm || "").toLowerCase());
+}
+
+export function collectMail(listen = [], top = []) {
+  const names = commHay(listen, top);
+  const ports = listenWorldPorts(listen, MAIL_PORTS);
+  const localMail = (listen || []).some((r) => MAIL_PORTS.has(r.port));
+  let kind = null;
+  if (runOk("systemctl", ["is-active", "postfix"]) || names.some((n) => /^(postfix|smtpd|qmgr)$/.test(n))) kind = "postfix";
+  else if (runOk("systemctl", ["is-active", "exim4"]) || runOk("systemctl", ["is-active", "exim"]) || names.some((n) => /^exim/.test(n)))
+    kind = "exim";
+  else if (names.some((n) => /^sendmail/.test(n)) || runOk("systemctl", ["is-active", "sendmail"])) kind = "sendmail";
+  else if (ports.length || localMail) kind = "postfix";
+  if (!kind && !ports.length && !localMail) return null;
+  let queue = null;
+  if (kind === "postfix") queue = parseMailqCount(runOut("postqueue", ["-p"]) || runOut("mailq", []));
+  else if (kind === "exim") queue = parseMailqCount(runOut("exim", ["-bpc"]) || runOut("exim4", ["-bpc"]));
+  else if (kind === "sendmail") queue = parseMailqCount(runOut("mailq", []));
+  let openRelay = null;
+  if (kind === "postfix") {
+    const conf = ["mynetworks", "inet_interfaces"]
+      .map((k) => {
+        const v = runOut("postconf", ["-h", k]).trim();
+        return v ? `${k} = ${v}` : "";
+      })
+      .filter(Boolean)
+      .join("\n");
+    openRelay = conf ? parsePostconfRelay(conf) : null;
+  }
+  return {
+    kind,
+    world: ports.length > 0,
+    ports,
+    queue,
+    openRelay,
+  };
+}
+
+export function collectVpn(listen = [], top = []) {
+  const names = commHay(listen, top);
+  const okPorts = listenWorldPorts(listen, VPN_OK_PORTS);
+  const weakPorts = listenWorldPorts(listen, VPN_WEAK_PORTS);
+  const localVpn = (listen || []).some((r) => VPN_OK_PORTS.has(r.port) || VPN_WEAK_PORTS.has(r.port));
+  const ifaces = parseWgInterfaces(runOut("wg", ["show", "interfaces"]));
+  let peers = null;
+  if (ifaces.length) {
+    peers = 0;
+    for (const iface of ifaces) {
+      peers += parseWgPeerCount(runOut("wg", ["show", iface, "peers"]));
+    }
+  }
+  let kind = null;
+  if (ifaces.length || names.some((n) => /^wg-crypt|^wireguard/.test(n)) || okPorts.includes(51820)) kind = "wireguard";
+  else if (names.some((n) => /^openvpn/.test(n)) || okPorts.includes(1194)) kind = "openvpn";
+  else if (names.some((n) => /^(charon|pluto|strongswan|swanctl)$/.test(n)) || okPorts.includes(500) || okPorts.includes(4500))
+    kind = "ipsec";
+  else if (weakPorts.includes(1723) || names.some((n) => /^pptpd/.test(n))) kind = "pptp";
+  else if (weakPorts.includes(1701) || names.some((n) => /^(xl2tpd|l2tp)/.test(n))) kind = "l2tp";
+  if (!kind && !ifaces.length && !okPorts.length && !weakPorts.length && !localVpn) return null;
+  return {
+    kind,
+    world: okPorts.length > 0 || weakPorts.length > 0,
+    ports: [...okPorts, ...weakPorts],
+    ifaces,
+    peers,
+  };
+}
+
+export function collectApps({ listen = [], top = [], sshFails = null } = {}) {
+  return {
+    cms: inferCmsOnDisk(),
+    mail: collectMail(listen, top),
+    vpn: collectVpn(listen, top),
+    sshFails: sshFails || null,
   };
 }
 
@@ -730,7 +1000,8 @@ export function gradeInside(pulse = {}) {
   if (minersFromTop(pulse.top).length) return "D";
   if (exposedAdmin.length || h.sshPassword || h.sshRoot) return "C";
   if (!fw || !ban) return "C";
-  if (diskHigh || oom || h.rebootNeeded || !h.timesync || loadHigh || connHot || stuck || pulse.failedUnit || (pulse.errors || []).length) return "C";
+  if (pulse?.apps?.mail?.openRelay) return "C";
+  if (diskHigh || oom || h.rebootNeeded || !h.timesync || loadHigh || connHot || stuck || pulse.failedUnit || (pulse.errors || []).some((e) => !isSatLogNoise(e?.text))) return "C";
   if (fw && ban && updates && h.timesync && !h.sshPassword && !h.sshRoot && !exposedAdmin.length && !h.dockerApi) return "A";
   if (fw && ban && !exposedAdmin.length && !h.dockerApi) return "B";
   return "C";
@@ -898,6 +1169,61 @@ export function compareInside(pulse, rec = {}, prev = null) {
         do: "Смотрите fail2ban и форму входа на витрине. Orb44 пароли не перебирает.",
       });
     }
+    const jails = Array.isArray(h.fail2banJails) ? h.fail2banJails : [];
+    const mailJail = jails.find((j) => /postfix|dovecot|exim|sasl/i.test(j.name) && Number(j.banned) > 0);
+    if (mailJail) {
+      notes.push({
+        kind: "mail-bans",
+        title: "fail2ban режет почтовый перебор",
+        text: `Jail ${mailJail.name}: сейчас в бане ${mailJail.banned}, ещё стучатся ${mailJail.failed}. Письма не читаем и не шлём — только счётчики jail.`,
+        do: "Это чужой перебор SMTP/IMAP, не рассылка с вашей очереди. Смотрите jail и SASL. Orb44 почту не трогает.",
+      });
+    }
+  }
+  const apps = pulse?.apps || {};
+  const sshFails = apps.sshFails;
+  if (sshFails && Number(sshFails.failed) + Number(sshFails.invalid) >= 15) {
+    notes.push({
+      kind: "ssh-fails",
+      title: "SSH с улицы стучится",
+      text: `За ${sshFails.windowMin || 20} мин в journal: Failed password ${sshFails.failed}, Invalid user ${sshFails.invalid}. IP не сохраняем.`,
+      do: "Ключи вместо пароля и fail2ban на sshd. Orb44 логины не перебирает и journal наружу не выгружает.",
+    });
+  }
+  const mail = apps.mail;
+  if (mail?.openRelay) {
+    notes.push({
+      kind: "mail-relay",
+      title: "Похоже на открытый релей",
+      text: `${mail.kind || "почта"}: mynetworks содержит 0.0.0.0/0. Чужой может слать спам через этот ящик. Очередь и письма не читаем.`,
+      do: "В postfix сузьте mynetworks до локальной сети и оставьте reject_unauth_destination. Orb44 postconf сам не правит.",
+    });
+  } else if (mail && Number(mail.queue) >= 50) {
+    notes.push({
+      kind: "mail-queue",
+      title: "Почтовая очередь толстая",
+      text: `${mail.kind || "почта"}: в очереди ${mail.queue} писем. Так бывает при рассылке или когда релей не принимает. Содержимое очереди не смотрим.`,
+      do: "На машине: postqueue -p / mailq — кто отправитель. Orb44 письма не шлёт и очередь не чистит.",
+    });
+  } else if (mail?.world && mail.kind) {
+    const hasMailJail = (h.fail2banJails || []).some((j) => /postfix|dovecot|exim|sasl/i.test(j.name));
+    if (h.fail2ban && !hasMailJail) {
+      notes.push({
+        kind: "mail-open",
+        title: "Почта слушает улицу без jail",
+        text: `${mail.kind} открыт снаружи (${(mail.ports || []).join(", ") || "SMTP"}). fail2ban есть, но почтового jail не видно. Это не доказанный спам — только гигиена.`,
+        do: "Добавьте jail postfix/dovecot в fail2ban. Orb44 jail сам не ставит.",
+      });
+    }
+  }
+  const vpn = apps.vpn;
+  if (vpn?.kind === "pptp" || vpn?.kind === "l2tp") {
+    notes.push({
+      kind: "vpn-weak",
+      title: "Старый VPN на машине",
+      text: `${vpn.kind.toUpperCase()} слушает ${(vpn.ports || []).join(", ") || "сеть"}. Протокол слабый, ключи и конфиг не читаем.`,
+      do: "Уберите PPTP/L2TP, оставьте WireGuard или OpenVPN. Orb44 VPN сам не переключает.",
+    });
   }
   const stuck = stuckFromTop(pulse?.top);
   if (stuck.length) {
@@ -1012,7 +1338,7 @@ export function compareInside(pulse, rec = {}, prev = null) {
       do: "На машине: systemctl status этого юнита. Orb44 его сам не поднимает.",
     });
   }
-  const errs = pulse?.errors || [];
+  const errs = (pulse?.errors || []).filter((e) => !isSatLogNoise(e?.text));
   if (errs.length) {
     const line = errs
       .slice(0, 3)
@@ -1103,6 +1429,30 @@ export function insideWatchReasons(pulse, prev, rec = {}) {
       kind: "stuffing-ssh",
       title: "fail2ban копит баны SSH",
       text: `Было ${banJump.from}, стало ${banJump.to}. Чужой перебор SSH, не вход на витрину. Пароли не подбираем.`,
+    });
+  }
+  const sshFails = pulse?.apps?.sshFails;
+  if (!banJump && sshFails && Number(sshFails.failed) >= 30) {
+    notes.push({
+      kind: "ssh-fails",
+      title: "SSH Failed password пачками",
+      text: `За ${sshFails.windowMin || 20} мин Failed password ${sshFails.failed}. IP не сохраняем.`,
+    });
+  }
+  if (pulse?.apps?.mail?.openRelay) {
+    notes.push({
+      kind: "mail-relay",
+      title: "Открытый почтовый релей",
+      text: `${pulse.apps.mail.kind || "почта"}: mynetworks 0.0.0.0/0.`,
+    });
+  }
+  const q = Number(pulse?.apps?.mail?.queue);
+  const prevQ = prev?.apps?.mail?.queue;
+  if (Number.isFinite(q) && q >= 80 && (prevQ == null || q >= Number(prevQ) + 40)) {
+    notes.push({
+      kind: "mail-queue",
+      title: "Почтовая очередь растёт",
+      text: prevQ != null ? `Было ${prevQ}, стало ${q}.` : `В очереди ${q} писем.`,
     });
   }
   if (prev) {
@@ -1251,6 +1601,7 @@ export function collectPulse(opts = {}) {
   const pressure = collectPressure();
   const grants = sanitizeGrants(opts.grants);
   const extra = collectRuntime({ listen, top, grants });
+  const apps = collectApps({ listen, top, sshFails: extra.sshFails });
   return sanitizePulse({
     ts: Date.now(),
     hostname: os.hostname(),
@@ -1269,6 +1620,7 @@ export function collectPulse(opts = {}) {
     grants,
     runtime: extra.runtime,
     errors: extra.errors,
+    apps,
   });
 }
 

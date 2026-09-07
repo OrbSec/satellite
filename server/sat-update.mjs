@@ -110,6 +110,7 @@ export function treeNeedsRefresh(root, latest, { force = false } = {}) {
   try {
     const pulse = fs.readFileSync(path.join(root, "server", "pulse.mjs"), "utf8");
     if (!pulse.includes("function collapseListen")) return true;
+    if (!pulse.includes("function collectApps")) return true;
     if (!fs.existsSync(path.join(root, "server", "sat-http.mjs"))) return true;
   } catch {
     return true;

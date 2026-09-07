@@ -44,17 +44,17 @@ Pin a version. Bare `npx @orb44/cli` goes stale.
 
 ```bash
 # Node 18+ · Linux or macOS
-npx @orb44/cli@0.1.13 login --url https://app.orb44.com
+npx @orb44/cli@0.1.15 login --url https://app.orb44.com
 ```
 
 Open the printed link while signed into the dashboard, confirm the domain, then optionally install the systemd daemon (default: no).
 
 ```bash
-npx @orb44/cli@0.1.13 status
-npx @orb44/cli@0.1.13 pulse
-npx @orb44/cli@0.1.13 install
+npx @orb44/cli@0.1.15 status
+npx @orb44/cli@0.1.15 pulse
+npx @orb44/cli@0.1.15 install
 orb44 update
-npx @orb44/cli@0.1.13 logout
+npx @orb44/cli@0.1.15 logout
 ```
 
 Device key: `~/.config/orb44/device.json` (mode `0600`). Revocable from the dashboard and from the CLI. Not a shell token.
