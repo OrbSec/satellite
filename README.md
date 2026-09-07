@@ -68,21 +68,21 @@ Advice text only. Nothing is executed on your machine.
 <table align="center">
   <tr>
     <td width="50%">
-      <img src="./docs/readme/tile-listen.svg" alt="Who is listening" />
+      <img src="./docs/readme/tile-listen.png" alt="Who is listening" />
       <p align="center">Who is listening — real bind, not a guess from an open port</p>
     </td>
     <td width="50%">
-      <img src="./docs/readme/tile-load.svg" alt="Load the outside never sees" />
+      <img src="./docs/readme/tile-load.png" alt="Load the outside never sees" />
       <p align="center">Load the outside never sees — CPU vs a quiet storefront</p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <img src="./docs/readme/tile-harden.svg" alt="Hardening" />
+      <img src="./docs/readme/tile-harden.png" alt="Hardening" />
       <p align="center">Firewall, fail2ban, SSH password login — facts from the host</p>
     </td>
     <td width="50%">
-      <img src="./docs/readme/tile-alerts.svg" alt="Telegram and Slack Watch" />
+      <img src="./docs/readme/tile-alerts.png" alt="Telegram and Slack Watch" />
       <p align="center">Watch alerts on Telegram and Slack when the picture moves</p>
     </td>
   </tr>
@@ -124,4 +124,3 @@ After a local pulse, open the dashboard for graphs, history, and alerts:
 
 **https://app.orb44.com**
 
-Questions: admin@orb44.com
