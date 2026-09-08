@@ -75,10 +75,15 @@ jobs:
           Product: https://orb44.com · Cabinet: https://app.orb44.com
           EOF
           )"
-          gh release create "$TAG" "$TGZ" "${TGZ}.cosign.bundle" SHA256SUMS \
-            --title "$TAG" \
-            --notes "$NOTES" \
-            --verify-tag || \
-          gh release create "$TAG" "$TGZ" "${TGZ}.cosign.bundle" SHA256SUMS \
-            --title "$TAG" \
-            --notes "$NOTES"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$TGZ" "${TGZ}.cosign.bundle" SHA256SUMS --clobber
+            gh release edit "$TAG" --title "$TAG" --notes "$NOTES"
+          else
+            gh release create "$TAG" "$TGZ" "${TGZ}.cosign.bundle" SHA256SUMS \
+              --title "$TAG" \
+              --notes "$NOTES" \
+              --verify-tag || \
+            gh release create "$TAG" "$TGZ" "${TGZ}.cosign.bundle" SHA256SUMS \
+              --title "$TAG" \
+              --notes "$NOTES"
+          fi
