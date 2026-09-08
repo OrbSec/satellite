@@ -18,6 +18,7 @@ import {
   applySatelliteAccess,
   accessManualHints,
 } from "../server/sat-access.mjs";
+import { runLiveTop, topIntervalSec } from "../server/sat-top.mjs";
 
 const DEVICE_FILE = process.env.ORB44_DEVICE_FILE || path.join(os.homedir(), ".config", "orb44", "device.json");
 const CLI_FILE = process.env.ORB44_CLI_FILE || path.join(path.dirname(DEVICE_FILE), "cli.json");
@@ -42,6 +43,7 @@ function args() {
     }
     else if (a === "--force") out.force = true;
     else if (a === "--purge") out.purge = true;
+    else if (a === "--once") out.once = true;
     else if (a === "--version" || a === "-V" || a === "-v") out.version = true;
     else if (a === "--url" || a === "--code" || a === "--name" || a === "--interval" || a === "--lang") {
       out[a.slice(2)] = argv[++i];
@@ -906,6 +908,20 @@ async function cmdUpdate() {
   console.log(dim(pin));
 }
 
+async function cmdTop(flags) {
+  applyLang(flags);
+  const device = loadDevice();
+  const sec = topIntervalSec(flags.interval);
+  const out = await runLiveTop({
+    lang,
+    intervalSec: sec,
+    once: Boolean(flags.once),
+    grants: device?.grants || null,
+    version: localCliVersion(),
+  });
+  if (out?.exit === 130) process.exit(130);
+}
+
 async function cmdVersion() {
   applyLang(opts);
   await printVersionPair();
@@ -976,6 +992,7 @@ const cmd = opts.version ? "version" : opts._[0] || "help";
 const run = {
   login: () => cmdLogin(opts),
   pulse: cmdPulse,
+  top: () => cmdTop(opts),
   daemon: () => cmdDaemon(opts),
   install: () => cmdInstall(opts, { enable: true }),
   uninstall: () => cmdUninstall(opts),

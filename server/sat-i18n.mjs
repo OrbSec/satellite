@@ -152,9 +152,26 @@ const STR = {
     preview_ssh_pass: "password",
     preview_ssh_key: "keys",
     preview_limited: "limited: cannot see which process owns the ports",
+    top_title: "Orb44 top",
+    top_grade: "grade",
+    top_refresh: "every {sec}s",
+    top_load: "load",
+    top_ram: "RAM",
+    top_disk: "disk",
+    top_listen: "LISTEN",
+    top_procs: "TOP",
+    top_acc_web: "storefront",
+    top_acc_restricted: "restricted",
+    top_acc_public: "from street",
+    top_acc_local: "local only",
+    top_miner_tag: "miner?",
+    top_hot_tag: "hot",
+    top_footer: "Live only · no history · Watch & street delta → app.orb44.com",
+    top_keys: "q quit · Ctrl+C",
     help: `Orb44 satellite {version} — admin device.
 
   orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
+  orb44 top [--interval 2] [--once] [--lang en|ru|ko|es]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
@@ -165,6 +182,7 @@ const STR = {
   orb44 update
   orb44 logout
 
+top: live perimeter view on this box (no login). History, alerts, street delta — cabinet subscription.
 Login asks language (saved), then daemon and logs (default no).
 Install asks daemon (default yes), logs (default no), then access for fail2ban / Docker / journal when present.
 --daemon / --logs / --fail2ban / --docker / --journal / --access skip those questions.
@@ -304,9 +322,26 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     preview_ssh_pass: "пароль",
     preview_ssh_key: "ключи",
     preview_limited: "ограничено: не видно, какой процесс слушает порты",
+    top_title: "Orb44 top",
+    top_grade: "грейд",
+    top_refresh: "каждые {sec} с",
+    top_load: "load",
+    top_ram: "RAM",
+    top_disk: "диск",
+    top_listen: "СЛУШАЕТ",
+    top_procs: "ТОП",
+    top_acc_web: "витрина",
+    top_acc_restricted: "ограничен",
+    top_acc_public: "с улицы",
+    top_acc_local: "только машина",
+    top_miner_tag: "майнер?",
+    top_hot_tag: "горячий",
+    top_footer: "Только live · без истории · Watch и дельта с улицы → app.orb44.com",
+    top_keys: "q выход · Ctrl+C",
     help: `Orb44 сателлит {version} — устройство админа.
 
   orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
+  orb44 top [--interval 2] [--once] [--lang en|ru|ko|es]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
@@ -317,6 +352,7 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
   orb44 update
   orb44 logout
 
+top: живой экран на этой машине (без login). История, алерты, дельта с улицы — подписка в кабинете.
 После login спрашивает язык (запоминает), затем демон и логи — по умолчанию нет.
 install: демон (да), логи (нет), затем доступ к fail2ban / Docker / journal если они есть.
 --daemon / --logs / --fail2ban / --docker / --journal / --access пропускают вопросы.
@@ -456,9 +492,26 @@ install: демон (да), логи (нет), затем доступ к fail2b
     preview_ssh_pass: "비밀번호",
     preview_ssh_key: "키",
     preview_limited: "제한: 포트를 연 프로세스를 볼 수 없음",
+    top_title: "Orb44 top",
+    top_grade: "등급",
+    top_refresh: "{sec}초마다",
+    top_load: "load",
+    top_ram: "RAM",
+    top_disk: "디스크",
+    top_listen: "LISTEN",
+    top_procs: "TOP",
+    top_acc_web: "스토어프론트",
+    top_acc_restricted: "제한",
+    top_acc_public: "외부",
+    top_acc_local: "로컬만",
+    top_miner_tag: "채굴?",
+    top_hot_tag: "과열",
+    top_footer: "Live만 · 기록 없음 · Watch·거리 델타 → app.orb44.com",
+    top_keys: "q 종료 · Ctrl+C",
     help: `Orb44 위성 {version} — 관리자 장치.
 
   orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
+  orb44 top [--interval 2] [--once] [--lang en|ru|ko|es]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
@@ -469,6 +522,7 @@ install: демон (да), логи (нет), затем доступ к fail2b
   orb44 update
   orb44 logout
 
+top: 이 박스의 live 화면 (login 불필요). 기록·알림·거리 델타 — 콘솔 구독.
 login에서 언어를 묻고 저장한 뒤, 데몬과 로그는 기본값 아니오입니다.
 install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal 접근.
 --daemon / --logs / --fail2ban / --docker / --journal / --access는 질문을 건너뜁니다.
@@ -608,9 +662,26 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     preview_ssh_pass: "contraseña",
     preview_ssh_key: "claves",
     preview_limited: "limitado: no se ve qué proceso tiene los puertos",
+    top_title: "Orb44 top",
+    top_grade: "grado",
+    top_refresh: "cada {sec}s",
+    top_load: "load",
+    top_ram: "RAM",
+    top_disk: "disco",
+    top_listen: "ESCUCHA",
+    top_procs: "TOP",
+    top_acc_web: "vitrina",
+    top_acc_restricted: "restringido",
+    top_acc_public: "de la calle",
+    top_acc_local: "solo local",
+    top_miner_tag: "¿minero?",
+    top_hot_tag: "caliente",
+    top_footer: "Solo live · sin historial · Watch y delta de calle → app.orb44.com",
+    top_keys: "q salir · Ctrl+C",
     help: `Satélite Orb44 {version} — dispositivo de admin.
 
   orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
+  orb44 top [--interval 2] [--once] [--lang en|ru|ko|es]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
@@ -621,6 +692,7 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
   orb44 update
   orb44 logout
 
+top: vista live en esta máquina (sin login). Historial, alertas, delta de calle — suscripción en el gabinete.
 Login pregunta idioma (lo guarda), luego demonio y logs (por defecto no).
 install: demonio (sí), logs (no), luego acceso fail2ban / Docker / journal si están.
 --daemon / --logs / --fail2ban / --docker / --journal / --access saltan las preguntas.

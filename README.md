@@ -12,20 +12,32 @@
 
 Node 18+. Linux or macOS.
 
-## Install (pin a version)
+## Live view (no login)
+
+Perimeter snapshot on this box — load, RAM, disk, listeners with access labels, process top. **Live only**: no history, no Watch alerts, no street delta (those are in the paid cabinet).
 
 ```bash
-npx @orb44/cli@0.1.19 login --url https://app.orb44.com
+npx @orb44/cli@0.1.20 top
+npx @orb44/cli@0.1.20 top --interval 1
+npx @orb44/cli@0.1.20 top --once    # one frame, then exit
+```
+
+Keys: `q` quit · `Ctrl+C`.
+
+## Pair with the cabinet
+
+```bash
+npx @orb44/cli@0.1.20 login --url https://app.orb44.com
 ```
 
 Open the printed link while signed into the dashboard, confirm the domain, then optionally install the systemd daemon (default: no).
 
 ```bash
-npx @orb44/cli@0.1.19 status
-npx @orb44/cli@0.1.19 pulse
-npx @orb44/cli@0.1.19 install
+npx @orb44/cli@0.1.20 status
+npx @orb44/cli@0.1.20 pulse
+npx @orb44/cli@0.1.20 install
 orb44 update
-npx @orb44/cli@0.1.19 logout
+npx @orb44/cli@0.1.20 logout
 ```
 
 Do **not** run bare `npx @orb44/cli` — caches go stale. Pin the version or use `orb44` after install.
