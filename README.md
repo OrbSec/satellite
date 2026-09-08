@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | Product | [orb44.com](https://orb44.com) |
-| Cabinet | [app.orb44.com](https://app.orb44.com) |
+| Dashboard | [app.orb44.com](https://app.orb44.com) |
 | Source | [github.com/OrbSec/satellite](https://github.com/OrbSec/satellite) |
 | Security | [SECURITY.md](https://github.com/OrbSec/satellite/blob/main/SECURITY.md) · Cosign-signed GitHub Releases |
 | License | MIT |
@@ -14,7 +14,7 @@ Node 18+. Linux or macOS.
 
 ## Live view (no login)
 
-Perimeter snapshot on this box — load, RAM, disk, listeners with access labels, process top. **Live only**: no history, no Watch alerts, no street delta (those are in the paid cabinet).
+Perimeter snapshot on this box — load, RAM, disk, listeners with access labels, process top. **Live only**: no history, no Watch alerts, no street delta (those are on the paid plan).
 
 ```bash
 npx @orb44/cli@0.1.20 top
@@ -24,7 +24,7 @@ npx @orb44/cli@0.1.20 top --once    # one frame, then exit
 
 Keys: `q` quit · `Ctrl+C`.
 
-## Pair with the cabinet
+## Pair with the dashboard
 
 ```bash
 npx @orb44/cli@0.1.20 login --url https://app.orb44.com

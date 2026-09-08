@@ -72,7 +72,7 @@ jobs:
             ${TGZ}
           \`\`\`
 
-          Product: https://orb44.com · Cabinet: https://app.orb44.com
+          Product: https://orb44.com · Dashboard: https://app.orb44.com
           EOF
           )"
           if gh release view "$TAG" >/dev/null 2>&1; then

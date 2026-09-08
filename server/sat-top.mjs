@@ -50,7 +50,7 @@ function memPct(pulse) {
   return Math.min(100, (u / t0) * 100);
 }
 
-/** Same access classes as the cabinet listen table (labels only — no history). */
+/** Same access classes as the dashboard listen table (labels only — no history). */
 export function listenAccessKind(r) {
   const addr = String(r.addr || "");
   const local = addr === "127.0.0.1" || addr === "::1" || addr.startsWith("127.");

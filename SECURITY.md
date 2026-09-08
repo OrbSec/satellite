@@ -11,13 +11,13 @@
 ## What this agent is allowed to do
 
 - Collect a **read-only pulse** on the host where you installed it (load, listeners when visible, hardening signals).  
-- Send that pulse **outbound** to your Orb44 cabinet URL.  
+- Send that pulse **outbound** to your Orb44 dashboard URL.  
 - Store a **device key** under `~/.config/orb44/` with mode `0600`.
 
 ## What it must never do
 
 - Accept inbound shell / RPC from the cloud  
-- Run arbitrary commands returned by the cabinet (advice is text only)  
+- Run arbitrary commands returned by the dashboard (advice is text only)  
 - Dump databases, read application secrets from disk, or escalate privileges for “deeper” scans  
 - Brute-force credentials or mutate the customer’s edge config
 
@@ -63,7 +63,7 @@ cosign verify-blob \
 
 - Runtime: **no npm dependencies** by design (`package.json` must stay dependency-free).  
 - Updates: `orb44 update` pulls a versioned tarball for `@orb44/cli`; avoid unpinned `npx @orb44/cli` without a version.  
-- Device key compromise: revoke the satellite in the cabinet and run `orb44 logout` on the host.
+- Device key compromise: revoke the satellite in the dashboard and run `orb44 logout` on the host.
 
 ## Safe harbor
 

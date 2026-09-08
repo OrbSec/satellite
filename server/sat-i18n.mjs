@@ -182,7 +182,7 @@ const STR = {
   orb44 update
   orb44 logout
 
-top: live perimeter view on this box (no login). History, alerts, street delta — cabinet subscription.
+top: live perimeter view on this box (no login). History, alerts, street delta — paid plan.
 Login asks language (saved), then daemon and logs (default no).
 Install asks daemon (default yes), logs (default no), then access for fail2ban / Docker / journal when present.
 --daemon / --logs / --fail2ban / --docker / --journal / --access skip those questions.
@@ -352,7 +352,7 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
   orb44 update
   orb44 logout
 
-top: живой экран на этой машине (без login). История, алерты, дельта с улицы — подписка в кабинете.
+top: живой экран на этой машине (без login). История, алерты, дельта с улицы — paid plan.
 После login спрашивает язык (запоминает), затем демон и логи — по умолчанию нет.
 install: демон (да), логи (нет), затем доступ к fail2ban / Docker / journal если они есть.
 --daemon / --logs / --fail2ban / --docker / --journal / --access пропускают вопросы.
@@ -522,7 +522,7 @@ install: демон (да), логи (нет), затем доступ к fail2b
   orb44 update
   orb44 logout
 
-top: 이 박스의 live 화면 (login 불필요). 기록·알림·거리 델타 — 콘솔 구독.
+top: 이 박스의 live 화면 (login 불필요). 기록·알림·거리 델타 — paid plan.
 login에서 언어를 묻고 저장한 뒤, 데몬과 로그는 기본값 아니오입니다.
 install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal 접근.
 --daemon / --logs / --fail2ban / --docker / --journal / --access는 질문을 건너뜁니다.
@@ -692,7 +692,7 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
   orb44 update
   orb44 logout
 
-top: vista live en esta máquina (sin login). Historial, alertas, delta de calle — suscripción en el gabinete.
+top: vista live en esta máquina (sin login). Historial, alertas, delta de calle — paid plan.
 Login pregunta idioma (lo guarda), luego demonio y logs (por defecto no).
 install: demonio (sí), logs (no), luego acceso fail2ban / Docker / journal si están.
 --daemon / --logs / --fail2ban / --docker / --journal / --access saltan las preguntas.
