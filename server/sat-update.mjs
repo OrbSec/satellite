@@ -12,6 +12,7 @@ export const SAT_TREE_FILES = [
   "server/sat-http.mjs",
   "server/sat-update.mjs",
   "server/sat-logs.mjs",
+  "server/sat-access.mjs",
   "package.json",
 ];
 

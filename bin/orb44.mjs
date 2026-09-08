@@ -11,6 +11,13 @@ import { pickFromList } from "../server/cli-menu.mjs";
 import { SYSTEM_DEVICE, parseDeviceJson, hasExistingInstall, pickLiveDevice, deviceSearchPaths, loadFirstDevice, stripDevicePath } from "../server/sat-local.mjs";
 import { CLI_PACKAGE, cmpVer, readCliVersion, pickSatRoots, staleSatRoots, applyUpdateTree, fetchLatestMeta, unpackTarball } from "../server/sat-update.mjs";
 import { cabinetRequest, apiFailText } from "../server/sat-http.mjs";
+import {
+  probeAccessTargets,
+  normalizeAccess,
+  supplementaryGroups,
+  applySatelliteAccess,
+  accessManualHints,
+} from "../server/sat-access.mjs";
 
 const DEVICE_FILE = process.env.ORB44_DEVICE_FILE || path.join(os.homedir(), ".config", "orb44", "device.json");
 const CLI_FILE = process.env.ORB44_CLI_FILE || path.join(path.dirname(DEVICE_FILE), "cli.json");
@@ -25,6 +32,14 @@ function args() {
     else if (a === "--system") out.system = true;
     else if (a === "--daemon") out.daemon = true;
     else if (a === "--logs") out.logs = true;
+    else if (a === "--fail2ban") out.fail2ban = true;
+    else if (a === "--docker") out.docker = true;
+    else if (a === "--journal") out.journal = true;
+    else if (a === "--access") {
+      out.fail2ban = true;
+      out.docker = true;
+      out.journal = true;
+    }
     else if (a === "--force") out.force = true;
     else if (a === "--purge") out.purge = true;
     else if (a === "--version" || a === "-V" || a === "-v") out.version = true;
@@ -219,11 +234,52 @@ async function wantLogs(opts) {
   return idx === 1;
 }
 
+async function wantOneAccess(opts, flag, titleKey, yesKey, noKey, { ifYes = false, index = 1 } = {}) {
+  if (opts[flag]) return true;
+  if (opts.access) return true;
+  if (opts.yes) return ifYes;
+  if (!input.isTTY || !output.isTTY) return ifYes;
+  const idx = await pickFromList({
+    title: t(lang, titleKey),
+    items: [t(lang, noKey), t(lang, yesKey)],
+    index,
+    hint: "↑↓  Enter",
+    stdin: input,
+    stdout: output,
+  });
+  return idx === 1;
+}
+
+async function wantAccess(opts, { logs = false } = {}) {
+  const probe = probeAccessTargets();
+  const ifYes = Boolean(opts.logs || logs);
+  const access = normalizeAccess({
+    fail2ban: probe.fail2ban
+      ? await wantOneAccess(opts, "fail2ban", "ask_access_fail2ban", "access_yes", "access_no", { ifYes, index: 1 })
+      : Boolean(opts.fail2ban),
+    docker: probe.docker
+      ? await wantOneAccess(opts, "docker", "ask_access_docker", "access_yes", "access_no", { ifYes, index: 1 })
+      : Boolean(opts.docker),
+    journal: probe.journal || probe.webLogs
+      ? await wantOneAccess(opts, "journal", "ask_access_journal", "access_yes", "access_no", {
+          ifYes: ifYes || logs,
+          index: logs ? 1 : 0,
+        })
+      : Boolean(opts.journal),
+  });
+  return { access, probe };
+}
+
 function applyGrants(device, extra = {}) {
   const grants = {
     process: true,
     daemon: extra.daemon != null ? Boolean(extra.daemon) : Boolean(device.grants?.daemon),
     logs: extra.logs != null ? Boolean(extra.logs) : Boolean(device.grants?.logs),
+    ...normalizeAccess({
+      fail2ban: extra.fail2ban != null ? extra.fail2ban : device.grants?.fail2ban,
+      docker: extra.docker != null ? extra.docker : device.grants?.docker,
+      journal: extra.journal != null ? extra.journal : device.grants?.journal,
+    }),
   };
   device.grants = grants;
   return grants;
@@ -461,7 +517,7 @@ async function cmdDaemon(opts) {
   await new Promise(() => {});
 }
 
-function systemdUnit({ node, script, deviceFile, interval, user }) {
+function systemdUnit({ node, script, deviceFile, interval, user, groups = [] }) {
   const lines = [
     "[Unit]",
     "Description=Orb44 satellite pulse",
@@ -472,6 +528,8 @@ function systemdUnit({ node, script, deviceFile, interval, user }) {
   ];
   if (user) {
     lines.push(`User=${user}`, `Group=${user}`);
+    const supp = (groups || []).filter(Boolean);
+    if (supp.length) lines.push(`SupplementaryGroups=${supp.join(" ")}`);
   }
   lines.push(
     `ExecStart=${quote(node)} ${quote(script)} daemon --interval ${interval}`,
@@ -601,6 +659,17 @@ function printGrants(grants) {
   console.log(dim(t(lang, "grant_process") + ": " + on));
   console.log(dim(t(lang, "grant_daemon") + ": " + (grants.daemon ? on : off)));
   console.log(dim(t(lang, "grant_logs") + ": " + (grants.logs ? on : off)));
+  console.log(dim(t(lang, "grant_fail2ban") + ": " + (grants.fail2ban ? on : off)));
+  console.log(dim(t(lang, "grant_docker") + ": " + (grants.docker ? on : off)));
+  console.log(dim(t(lang, "grant_journal") + ": " + (grants.journal ? on : off)));
+}
+
+function printAccessNotes(notes) {
+  for (const n of notes || []) {
+    if (n.key === "group_missing" || n.key === "path_missing") continue;
+    if (n.ok) console.log(dim("   ✓ " + t(lang, `access_note_${n.key}`, { detail: n.detail })));
+    else console.log(dim("   ! " + t(lang, `access_note_${n.key}`, { detail: n.detail })));
+  }
 }
 
 async function cmdInstall(opts, { enable = false, skipAsk = false } = {}) {
@@ -616,14 +685,22 @@ async function cmdInstall(opts, { enable = false, skipAsk = false } = {}) {
   if (opts.url) device.api = String(opts.url).replace(/\/$/, "");
   let daemon;
   let logs;
+  let access;
   if (skipAsk) {
     daemon = opts.daemon != null ? Boolean(opts.daemon) : Boolean(device.grants?.daemon);
     logs = opts.logs != null ? Boolean(opts.logs) : Boolean(device.grants?.logs);
+    access = normalizeAccess({
+      fail2ban: opts.fail2ban != null ? opts.fail2ban : device.grants?.fail2ban,
+      docker: opts.docker != null ? opts.docker : device.grants?.docker,
+      journal: opts.journal != null ? opts.journal : device.grants?.journal,
+    });
   } else {
     daemon = await wantDaemon(opts, { ifYes: true, index: 1 });
     logs = await wantLogs(opts);
+    const got = await wantAccess(opts, { logs });
+    access = got.access;
   }
-  const grants = applyGrants(device, { daemon, logs });
+  const grants = applyGrants(device, { daemon, logs, ...access });
   persistDevice(device, [srcPath, SYSTEM_DEVICE]);
   printGrants(grants);
   if (logs) console.log(dim(t(lang, "logs_on")));
@@ -633,6 +710,7 @@ async function cmdInstall(opts, { enable = false, skipAsk = false } = {}) {
   let deviceFile = DEVICE_FILE;
   let user = null;
   let script = SCRIPT;
+  let groups = [];
   if (asSystem) {
     const acct = ensureSystemServiceAccount(srcPath);
     if (acct.ok) {
@@ -646,9 +724,19 @@ async function cmdInstall(opts, { enable = false, skipAsk = false } = {}) {
         /* key stays root-owned until next chown -R */
       }
       console.log(dim(t(lang, "daemon_user", { user, file: deviceFile })));
+      if (access.fail2ban || access.docker || access.journal) {
+        console.log(dim(t(lang, "access_applying")));
+        const applied = applySatelliteAccess(user, access);
+        printAccessNotes(applied.notes);
+        groups = supplementaryGroups(access);
+        if (groups.length) console.log(dim(t(lang, "access_groups", { groups: groups.join(" ") })));
+      }
     } else {
       console.log(dim(t(lang, "daemon_user_fail", { err: acct.err ? `: ${acct.err}` : "" })));
     }
+  } else if (access.fail2ban || access.docker || access.journal) {
+    console.log(dim(t(lang, "access_need_root")));
+    for (const line of accessManualHints("orb44", access)) console.log(dim("   " + line));
   }
   const unit = systemdUnit({
     node: process.execPath,
@@ -656,6 +744,7 @@ async function cmdInstall(opts, { enable = false, skipAsk = false } = {}) {
     deviceFile,
     interval,
     user,
+    groups,
   });
   const unitPath = asSystem
     ? "/etc/systemd/system/orb44-satellite.service"

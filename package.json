@@ -1,6 +1,6 @@
 {
   "name": "@orb44/cli",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "Orb44 Watch satellite — inside pulse from your VPS (load, listeners, hardening). Pairs with the street snapshot; the cabinet never runs commands on the machine.",
   "type": "module",
   "bin": {
@@ -14,7 +14,8 @@
     "server/sat-local.mjs",
     "server/sat-http.mjs",
     "server/sat-update.mjs",
-    "server/sat-logs.mjs"
+    "server/sat-logs.mjs",
+    "server/sat-access.mjs"
   ],
   "engines": {
     "node": ">=18"
@@ -39,5 +40,8 @@
   "license": "MIT",
   "publishConfig": {
     "access": "public"
+  },
+  "scripts": {
+    "prepack": "node ../../scripts/stage-orb44-npm.mjs"
   }
 }

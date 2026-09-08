@@ -49,9 +49,31 @@ const STR = {
     logs_yes: "Yes — last errors if readable",
     logs_skip: "Log monitoring off. Later: orb44 login --logs   or orb44 install --logs",
     logs_on: "Log monitoring on. Docker/kube/nginx only if this user can read them.",
+    ask_access_fail2ban: "Allow reading fail2ban counters?\nAdds a read ACL on the fail2ban socket for user orb44 (no sudo at runtime).",
+    ask_access_docker: "Allow Docker visibility (docker ps / logs)?\nAdds orb44 to the docker group. Same rights as any docker-group user on this host.",
+    ask_access_journal: "Allow reading journal and web error logs?\nAdds orb44 to systemd-journal / adm and ACL on nginx/apache log dirs if present.",
+    access_yes: "Yes — set access now",
+    access_no: "No — leave as is",
+    access_applying: "Setting read access for service user…",
+    access_need_root: "Access chosen, but install is not root — run later with sudo, or:",
+    access_groups: "systemd SupplementaryGroups: {groups}",
+    access_note_group_added: "group +{detail}",
+    access_note_group_already: "already in {detail}",
+    access_note_group_missing: "no group {detail}",
+    access_note_group_fail: "usermod failed: {detail}",
+    access_note_setfacl_missing: "install package acl (setfacl) for {detail}",
+    access_note_path_missing: "missing {detail}",
+    access_note_acl_ok: "ACL {detail}",
+    access_note_acl_fail: "ACL failed: {detail}",
+    access_note_dropin_ok: "fail2ban drop-in {detail}",
+    access_note_dropin_fail: "drop-in failed: {detail}",
+    access_note_fail2ban_restart_fail: "fail2ban restart failed: {detail}",
     grant_process: "System processes",
     grant_daemon: "Restart after reboot",
     grant_logs: "Log monitoring",
+    grant_fail2ban: "fail2ban counters",
+    grant_docker: "Docker",
+    grant_journal: "journal / web logs",
     grant_on: "on",
     grant_off: "off",
     need_login: "First: orb44 login",
@@ -131,7 +153,7 @@ const STR = {
   orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
   orb44 pulse
   orb44 daemon [--interval 300]
-  orb44 install [--system] [--daemon] [--logs] [--interval 300]
+  orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
   orb44 lang [en|ru|ko|es]
   orb44 status
@@ -140,7 +162,8 @@ const STR = {
   orb44 logout
 
 Login asks language (saved), then daemon and logs (default no).
-Install asks the same two (daemon default yes, logs default no). --daemon / --logs skip the questions.
+Install asks daemon (default yes), logs (default no), then access for fail2ban / Docker / journal when present.
+--daemon / --logs / --fail2ban / --docker / --journal / --access skip those questions.
 Key: {file}
 Outgoing pulse. The dashboard does not execute commands; it replies with advice.`,
   },
@@ -174,9 +197,31 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     logs_yes: "Да — последние ошибки, если читаются",
     logs_skip: "Логи не снимаем. Позже: orb44 login --logs   или orb44 install --logs",
     logs_on: "Логи включены. Docker/kube/nginx — только если этот пользователь их видит.",
+    ask_access_fail2ban: "Разрешить чтение счётчиков fail2ban?\nПоставим ACL на сокет fail2ban для пользователя orb44 (без sudo в рантайме).",
+    ask_access_docker: "Разрешить видеть Docker (docker ps / logs)?\nДобавим orb44 в группу docker. Те же права, что у любого в этой группе на хосте.",
+    ask_access_journal: "Разрешить чтение journal и error-логов веба?\nГруппы systemd-journal / adm и ACL на каталоги nginx/apache, если есть.",
+    access_yes: "Да — выдать доступ",
+    access_no: "Нет — оставить как есть",
+    access_applying: "Выдаю доступ пользователю службы…",
+    access_need_root: "Доступ выбран, но install не от root — позже через sudo, или:",
+    access_groups: "systemd SupplementaryGroups: {groups}",
+    access_note_group_added: "группа +{detail}",
+    access_note_group_already: "уже в {detail}",
+    access_note_group_missing: "нет группы {detail}",
+    access_note_group_fail: "usermod не вышел: {detail}",
+    access_note_setfacl_missing: "нужен пакет acl (setfacl) для {detail}",
+    access_note_path_missing: "нет {detail}",
+    access_note_acl_ok: "ACL {detail}",
+    access_note_acl_fail: "ACL не вышел: {detail}",
+    access_note_dropin_ok: "drop-in fail2ban {detail}",
+    access_note_dropin_fail: "drop-in не записан: {detail}",
+    access_note_fail2ban_restart_fail: "restart fail2ban не вышел: {detail}",
     grant_process: "Системные процессы",
     grant_daemon: "Рестарт после загрузки",
     grant_logs: "Мониторинг логов",
+    grant_fail2ban: "счётчики fail2ban",
+    grant_docker: "Docker",
+    grant_journal: "journal / логи веба",
     grant_on: "да",
     grant_off: "нет",
     need_login: "Сначала: orb44 login",
@@ -256,7 +301,7 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
   orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
   orb44 pulse
   orb44 daemon [--interval 300]
-  orb44 install [--system] [--daemon] [--logs] [--interval 300]
+  orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
   orb44 lang [en|ru|ko|es]
   orb44 status
@@ -265,7 +310,8 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
   orb44 logout
 
 После login спрашивает язык (запоминает), затем демон и логи — по умолчанию нет.
-install спрашивает то же (демон — да, логи — нет). --daemon / --logs пропускают вопросы.
+install: демон (да), логи (нет), затем доступ к fail2ban / Docker / journal если они есть.
+--daemon / --logs / --fail2ban / --docker / --journal / --access пропускают вопросы.
 Ключ: {file}
 Пульс исходящий. Кабинет не выполняет команды: отвечает текстом «что сделать».`,
   },
@@ -299,9 +345,31 @@ install спрашивает то же (демон — да, логи — нет
     logs_yes: "예 — 읽을 수 있으면 마지막 오류",
     logs_skip: "로그 수집 안 함. 나중에: orb44 login --logs  또는 orb44 install --logs",
     logs_on: "로그 수집 켜짐. Docker/kube/nginx는 이 사용자가 읽을 수 있을 때만.",
+    ask_access_fail2ban: "fail2ban 카운터를 읽을까요?\norb44 사용자에게 fail2ban 소켓 읽기 ACL을 줍니다 (런타임 sudo 없음).",
+    ask_access_docker: "Docker를 볼까요 (docker ps / logs)?\norb44를 docker 그룹에 넣습니다. 이 호스트의 docker 그룹과 같은 권한입니다.",
+    ask_access_journal: "journal과 웹 오류 로그를 읽을까요?\nsystemd-journal / adm 그룹과 nginx/apache 로그 디렉터리 ACL.",
+    access_yes: "예 — 지금 권한 부여",
+    access_no: "아니요 — 그대로",
+    access_applying: "서비스 사용자 읽기 권한 설정 중…",
+    access_need_root: "권한을 골랐지만 root가 아닙니다 — 나중에 sudo로, 또는:",
+    access_groups: "systemd SupplementaryGroups: {groups}",
+    access_note_group_added: "그룹 +{detail}",
+    access_note_group_already: "이미 {detail}",
+    access_note_group_missing: "그룹 없음 {detail}",
+    access_note_group_fail: "usermod 실패: {detail}",
+    access_note_setfacl_missing: "acl 패키지(setfacl) 필요: {detail}",
+    access_note_path_missing: "없음 {detail}",
+    access_note_acl_ok: "ACL {detail}",
+    access_note_acl_fail: "ACL 실패: {detail}",
+    access_note_dropin_ok: "fail2ban drop-in {detail}",
+    access_note_dropin_fail: "drop-in 실패: {detail}",
+    access_note_fail2ban_restart_fail: "fail2ban 재시작 실패: {detail}",
     grant_process: "시스템 프로세스",
     grant_daemon: "부팅 후 재시작",
     grant_logs: "로그 모니터링",
+    grant_fail2ban: "fail2ban 카운터",
+    grant_docker: "Docker",
+    grant_journal: "journal / 웹 로그",
     grant_on: "켜짐",
     grant_off: "꺼짐",
     need_login: "먼저: orb44 login",
@@ -381,7 +449,7 @@ install спрашивает то же (демон — да, логи — нет
   orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
   orb44 pulse
   orb44 daemon [--interval 300]
-  orb44 install [--system] [--daemon] [--logs] [--interval 300]
+  orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
   orb44 lang [en|ru|ko|es]
   orb44 status
@@ -390,7 +458,8 @@ install спрашивает то же (демон — да, логи — нет
   orb44 logout
 
 login에서 언어를 묻고 저장한 뒤, 데몬과 로그는 기본값 아니오입니다.
-install도 같은 두 질문(데몬 기본 예, 로그 기본 아니오). --daemon / --logs는 질문을 건너뜁니다.
+install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal 접근.
+--daemon / --logs / --fail2ban / --docker / --journal / --access는 질문을 건너뜁니다.
 키: {file}
 나가는 펄스. 콘솔은 명령을 실행하지 않고 조언만 돌려줍니다.`,
   },
@@ -424,9 +493,31 @@ install도 같은 두 질문(데몬 기본 예, 로그 기본 아니오). --daem
     logs_yes: "Sí — últimos errores si se pueden leer",
     logs_skip: "Sin logs. Luego: orb44 login --logs   o orb44 install --logs",
     logs_on: "Logs activos. Docker/kube/nginx solo si este usuario los ve.",
+    ask_access_fail2ban: "¿Permitir leer contadores de fail2ban?\nACL de lectura en el socket fail2ban para orb44 (sin sudo en runtime).",
+    ask_access_docker: "¿Permitir ver Docker (docker ps / logs)?\nAñade orb44 al grupo docker. Mismos derechos que cualquier miembro en este host.",
+    ask_access_journal: "¿Permitir leer journal y logs de error web?\nGrupos systemd-journal / adm y ACL en dirs nginx/apache si existen.",
+    access_yes: "Sí — dar acceso ahora",
+    access_no: "No — dejar igual",
+    access_applying: "Configurando acceso de lectura para el usuario del servicio…",
+    access_need_root: "Acceso elegido, pero install no es root — luego con sudo, o:",
+    access_groups: "systemd SupplementaryGroups: {groups}",
+    access_note_group_added: "grupo +{detail}",
+    access_note_group_already: "ya en {detail}",
+    access_note_group_missing: "sin grupo {detail}",
+    access_note_group_fail: "usermod falló: {detail}",
+    access_note_setfacl_missing: "hace falta paquete acl (setfacl) para {detail}",
+    access_note_path_missing: "falta {detail}",
+    access_note_acl_ok: "ACL {detail}",
+    access_note_acl_fail: "ACL falló: {detail}",
+    access_note_dropin_ok: "drop-in fail2ban {detail}",
+    access_note_dropin_fail: "drop-in falló: {detail}",
+    access_note_fail2ban_restart_fail: "reinicio fail2ban falló: {detail}",
     grant_process: "Procesos del sistema",
     grant_daemon: "Reinicio tras el arranque",
     grant_logs: "Monitor de logs",
+    grant_fail2ban: "contadores fail2ban",
+    grant_docker: "Docker",
+    grant_journal: "journal / logs web",
     grant_on: "sí",
     grant_off: "no",
     need_login: "Primero: orb44 login",
@@ -506,7 +597,7 @@ install도 같은 두 질문(데몬 기본 예, 로그 기본 아니오). --daem
   orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
   orb44 pulse
   orb44 daemon [--interval 300]
-  orb44 install [--system] [--daemon] [--logs] [--interval 300]
+  orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
   orb44 lang [en|ru|ko|es]
   orb44 status
@@ -515,7 +606,8 @@ install도 같은 두 질문(데몬 기본 예, 로그 기본 아니오). --daem
   orb44 logout
 
 Login pregunta idioma (lo guarda), luego demonio y logs (por defecto no).
-install pregunta lo mismo (demonio sí, logs no). --daemon / --logs saltan las preguntas.
+install: demonio (sí), logs (no), luego acceso fail2ban / Docker / journal si están.
+--daemon / --logs / --fail2ban / --docker / --journal / --access saltan las preguntas.
 Clave: {file}
 Pulso saliente. El gabinete no ejecuta órdenes; responde con consejos.`,
   },
