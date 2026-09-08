@@ -612,6 +612,17 @@ export function stuckFromTop(top = []) {
   }).slice(0, 6);
 }
 
+const MINER_COMM = /^(xmrig|minerd|nbminer|t-rex|trex|ethminer|phoenixminer|lolminer|gminer|teamredminer|kdevtmpfsi|kinsing|sysupdate|networkservice)$/i;
+const MINER_HEX = /^[a-f0-9]{8,32}$/i;
+const LEGIT_HOT = /^(php-fpm|php|node|nodejs|java|mysqld|postgres|redis-server|nginx|caddy|apache2|httpd|python|python3|ruby|uwsgi|gunicorn|sidekiq|beanstalkd)$/i;
+/** Tools the pulse itself (or the host agent) runs — never treat as miner/overload. */
+const PULSE_HELPER = /^(fail2ban-client|fail2ban-server|fail2ban|ss|ip|lsof|ps|systemctl|journalctl|docker|dockerd|containerd|setfacl|getfacl|ufw|iptables|ip6tables|nft|getent|chronyc|postconf|wg|sshd|orb44)$/i;
+
+export function isPulseHelper(proc = {}) {
+  const comm = String(proc.comm || "").replace(/^.*\//, "").slice(0, 64);
+  return Boolean(comm) && PULSE_HELPER.test(comm);
+}
+
 export function ramHotFloorMb(memTotal) {
   const n = Number(memTotal);
   if (!Number.isFinite(n) || n <= 0) return 1024;
@@ -621,19 +632,18 @@ export function ramHotFloorMb(memTotal) {
 
 export function hotFromTop(top = [], memTotal) {
   const floor = ramHotFloorMb(memTotal);
-  return (top || []).filter((r) => Number(r.cpuPct) >= 70 || Number(r.rssMb) >= floor).slice(0, 6);
+  return (top || [])
+    .filter((r) => !isPulseHelper(r))
+    .filter((r) => Number(r.cpuPct) >= 70 || Number(r.rssMb) >= floor)
+    .slice(0, 6);
 }
-
-const MINER_COMM = /^(xmrig|minerd|nbminer|t-rex|trex|ethminer|phoenixminer|lolminer|gminer|teamredminer|kdevtmpfsi|kinsing|sysupdate|networkservice)$/i;
-const MINER_HEX = /^[a-f0-9]{8,32}$/i;
-const LEGIT_HOT = /^(php-fpm|php|node|nodejs|java|mysqld|postgres|redis-server|nginx|caddy|apache2|httpd|python|python3|ruby|uwsgi|gunicorn|sidekiq|beanstalkd)$/i;
 
 /** Cryptojacking heuristic: known miner names, or near-100% CPU with tiny RSS and non-legit name. */
 export function looksLikeMiner(proc = {}) {
   const comm = String(proc.comm || "").replace(/^.*\//, "").slice(0, 64);
   if (!comm) return false;
+  if (PULSE_HELPER.test(comm) || LEGIT_HOT.test(comm)) return false;
   if (MINER_COMM.test(comm)) return true;
-  if (LEGIT_HOT.test(comm)) return false;
   if (MINER_HEX.test(comm) && Number(proc.cpuPct) >= 90) return true;
   const cpu = Number(proc.cpuPct);
   const rss = Number(proc.rssMb);
