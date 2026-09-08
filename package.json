@@ -42,6 +42,6 @@
     "access": "public"
   },
   "scripts": {
-    "prepack": "node ../../scripts/stage-orb44-npm.mjs"
+    "prepack": "node ./prepack.mjs"
   }
 }

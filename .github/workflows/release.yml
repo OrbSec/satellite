@@ -31,7 +31,7 @@ jobs:
         id: pack
         run: |
           set -euo pipefail
-          TGZ=$(npm pack | tail -1)
+          TGZ=$(npm pack --ignore-scripts | tail -1)
           echo "tgz=$TGZ" >> "$GITHUB_OUTPUT"
           sha256sum "$TGZ" | tee SHA256SUMS
 
