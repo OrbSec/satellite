@@ -666,7 +666,7 @@ function printGrants(grants) {
 
 function printAccessNotes(notes) {
   for (const n of notes || []) {
-    if (n.key === "group_missing" || n.key === "path_missing") continue;
+    if (n.key === "group_missing" || n.key === "path_missing" || n.key === "setfacl_ok") continue;
     if (n.ok) console.log(dim("   ✓ " + t(lang, `access_note_${n.key}`, { detail: n.detail })));
     else console.log(dim("   ! " + t(lang, `access_note_${n.key}`, { detail: n.detail })));
   }

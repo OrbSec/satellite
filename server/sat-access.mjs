@@ -74,6 +74,36 @@ function ensureInGroup(user, group, spawn) {
   return note(true, "group_added", group);
 }
 
+/** Detect host package manager and how to install packages (root only). */
+export function detectPkgInstaller(spawn = run) {
+  const rows = [
+    { bin: "apt-get", args: (pkgs) => ["install", "-y", ...pkgs], env: { DEBIAN_FRONTEND: "noninteractive" } },
+    { bin: "dnf", args: (pkgs) => ["install", "-y", ...pkgs] },
+    { bin: "yum", args: (pkgs) => ["install", "-y", ...pkgs] },
+    { bin: "apk", args: (pkgs) => ["add", "--no-cache", ...pkgs] },
+    { bin: "zypper", args: (pkgs) => ["--non-interactive", "install", ...pkgs] },
+  ];
+  return rows.find((r) => cmdExists(r.bin, spawn)) || null;
+}
+
+/**
+ * Ensure setfacl exists. With install=true (default), install package `acl` when the user
+ * already consented to fail2ban/journal ACL access and we are applying as root.
+ */
+export function ensureSetfacl({ spawn = run, install = true } = {}) {
+  if (cmdExists("setfacl", spawn)) return note(true, "setfacl_ok", "setfacl");
+  if (!install) return note(false, "setfacl_missing", "acl");
+  const installer = detectPkgInstaller(spawn);
+  if (!installer) return note(false, "pkg_mgr_unknown", "acl");
+  const opts = installer.env ? { env: { ...process.env, ...installer.env } } : {};
+  const r = spawn(installer.bin, installer.args(["acl"]), opts);
+  if (r.status !== 0) {
+    return note(false, "pkg_install_fail", `${installer.bin} acl: ${(r.stderr || r.stdout || "").trim()}`);
+  }
+  if (!cmdExists("setfacl", spawn)) return note(false, "pkg_install_fail", "acl installed but setfacl still missing");
+  return note(true, "pkg_installed", "acl");
+}
+
 function aclOnPath(user, target, spawn) {
   if (!cmdExists("setfacl", spawn)) return note(false, "setfacl_missing", target);
   if (!fs.existsSync(target)) return note(false, "path_missing", target);
@@ -103,34 +133,56 @@ function writeFail2banDropIn(user, { mkdir, write, spawn } = {}) {
 /**
  * Apply read access for service user. Safe to call only as root.
  * Does not grant write/mutate on Docker beyond what the docker group already allows on the host.
+ * When fail2ban/journal ACL is needed and setfacl is missing, installs package `acl` (installPkgs, default true).
  */
 export function applySatelliteAccess(user, access, deps = {}) {
   const a = normalizeAccess(access);
   const spawn = deps.spawn || run;
   const notes = [];
   const u = String(user || "orb44").replace(/[^\w.-]/g, "") || "orb44";
+  const needAcl = a.fail2ban || a.journal;
+  const installPkgs = deps.installPkgs !== false;
+
+  if (needAcl) notes.push(ensureSetfacl({ spawn, install: installPkgs }));
+  const haveAcl = cmdExists("setfacl", spawn);
 
   if (a.docker) notes.push(ensureInGroup(u, "docker", spawn));
   if (a.journal) {
     notes.push(ensureInGroup(u, "systemd-journal", spawn));
     notes.push(ensureInGroup(u, "adm", spawn));
-    for (const dir of WEB_LOG_DIRS) {
-      if (fs.existsSync(dir)) notes.push(aclOnPath(u, dir, spawn));
+    if (haveAcl) {
+      for (const dir of WEB_LOG_DIRS) {
+        if (fs.existsSync(dir)) notes.push(aclOnPath(u, dir, spawn));
+      }
     }
   }
   if (a.fail2ban) {
     notes.push(writeFail2banDropIn(u, deps));
-    for (const sock of [FAIL2BAN_SOCK, "/run/fail2ban/fail2ban.sock"]) {
-      if (fs.existsSync(sock)) notes.push(aclOnPath(u, sock, spawn));
+    if (haveAcl) {
+      for (const sock of [FAIL2BAN_SOCK, "/run/fail2ban/fail2ban.sock"]) {
+        if (fs.existsSync(sock)) notes.push(aclOnPath(u, sock, spawn));
+      }
     }
   }
-  return { ok: notes.every((n) => n.ok || n.key === "group_missing" || n.key === "path_missing"), notes };
+  return {
+    ok: notes.every((n) => n.ok || n.key === "group_missing" || n.key === "path_missing"),
+    notes,
+  };
 }
 
-export function accessManualHints(user, access) {
+export function accessManualHints(user, access, { spawn = run } = {}) {
   const a = normalizeAccess(access);
   const u = user || "orb44";
   const lines = [];
+  if ((a.fail2ban || a.journal) && !cmdExists("setfacl", spawn)) {
+    const inst = detectPkgInstaller(spawn);
+    if (inst?.bin === "apt-get") lines.push("apt-get install -y acl");
+    else if (inst?.bin === "dnf") lines.push("dnf install -y acl");
+    else if (inst?.bin === "yum") lines.push("yum install -y acl");
+    else if (inst?.bin === "apk") lines.push("apk add acl");
+    else if (inst?.bin === "zypper") lines.push("zypper install -y acl");
+    else lines.push("install package acl (setfacl) via your package manager");
+  }
   if (a.docker) lines.push(`usermod -aG docker ${u}`);
   if (a.journal) lines.push(`usermod -aG systemd-journal,adm ${u}`);
   if (a.fail2ban) {

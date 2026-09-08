@@ -15,17 +15,17 @@ Node 18+. Linux or macOS.
 ## Install (pin a version)
 
 ```bash
-npx @orb44/cli@0.1.16 login --url https://app.orb44.com
+npx @orb44/cli@0.1.18 login --url https://app.orb44.com
 ```
 
 Open the printed link while signed into the dashboard, confirm the domain, then optionally install the systemd daemon (default: no).
 
 ```bash
-npx @orb44/cli@0.1.16 status
-npx @orb44/cli@0.1.16 pulse
-npx @orb44/cli@0.1.16 install
+npx @orb44/cli@0.1.18 status
+npx @orb44/cli@0.1.18 pulse
+npx @orb44/cli@0.1.18 install
 orb44 update
-npx @orb44/cli@0.1.16 logout
+npx @orb44/cli@0.1.18 logout
 ```
 
 Do **not** run bare `npx @orb44/cli` — caches go stale. Pin the version or use `orb44` after install.
