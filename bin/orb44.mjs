@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { stdin as input, stdout as output } from "node:process";
 import { collectPulse, formatPulsePreview } from "../server/pulse.mjs";
 import { LANGS, LANG_LABEL, detectLang, normalizeLang, t } from "../server/sat-i18n.mjs";
+import { localizeInsideNote } from "../web/inside-notes.js";
 import { pickFromList } from "../server/cli-menu.mjs";
 import { SYSTEM_DEVICE, parseDeviceJson, hasExistingInstall, pickLiveDevice, deviceSearchPaths, loadFirstDevice, stripDevicePath } from "../server/sat-local.mjs";
 import { CLI_PACKAGE, cmpVer, readCliVersion, pickSatRoots, staleSatRoots, applyUpdateTree, fetchLatestMeta, unpackTarball } from "../server/sat-update.mjs";
@@ -211,7 +212,7 @@ async function wantDaemon(opts, { ifYes = false, index = 0 } = {}) {
 }
 
 function printAdvice(notes) {
-  const list = Array.isArray(notes) ? notes.filter((n) => n?.title) : [];
+  const list = Array.isArray(notes) ? notes.map((n) => localizeInsideNote(n, lang)).filter((n) => n?.title) : [];
   if (!list.length) return;
   console.log(`\n${bold("📋  " + t(lang, "advice_title"))}`);
   console.log(dim(t(lang, "advice_sub")));

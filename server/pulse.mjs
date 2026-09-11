@@ -3,6 +3,7 @@ import fs from "node:fs";
 import net from "node:net";
 import { execFileSync } from "node:child_process";
 import { t } from "./sat-i18n.mjs";
+import { insideNote } from "../web/inside-notes.js";
 import { collectRuntime, sanitizeErrors, sanitizeGrants, sanitizeRuntime, isSatLogNoise } from "./sat-logs.mjs";
 
 const COMM_RE = /[^a-zA-Z0-9._+-]/g;
@@ -1034,54 +1035,27 @@ export function compareInside(pulse, rec = {}, prev = null) {
     const leaked = hasStreet ? exposedAdmin.filter((r) => streetOpen.includes(r.port)) : [];
     const held = hasStreet ? exposedAdmin.filter((r) => !streetOpen.includes(r.port)) : exposedAdmin;
     if (leaked.length) {
-      const names = [...new Set(leaked.map((r) => labelPort(r)))];
-      notes.push({
-        kind: "listen-leaked",
-        title: "Служебные порты отвечают и с улицы",
-        text: `Машина слушает ${names.join(", ")} на 0.0.0.0, и снимок с интернета на тех же портах получил ответ сервиса, не пустой SYN-ACK. Это уже не «файрвол, скорее всего, держит» — сокет открыт снаружи.`,
-        do: "Сначала закройте порт на файрволе панели и в docker-compose поставьте 127.0.0.1 перед номером. Orb44 файрвол сам не включает и compose не правит.",
-      });
+      const names = [...new Set(leaked.map((r) => labelPort(r)))].join(", ");
+      notes.push(insideNote("listen-leaked", "listen-leaked", { names }));
     }
     if (held.length) {
-      const names = [...new Set(held.map((r) => labelPort(r)))];
-      notes.push({
-        kind: "listen-open",
-        title: hasStreet ? "Базы слушают сеть сервера, с улицы молчат" : "Базы слушают всю сеть сервера",
-        text: hasStreet
-          ? `Сейчас ${names.join(", ")} принимают подключения с любого сетевого адреса этой машины. Снимок с интернета на этих портах не получил баннер сервиса — файрвол держит. Если порт откроют в панели VPS, до базы доберётся любой, не только ваш сайт.`
-          : `Сейчас ${names.join(", ")} принимают подключения не только с программ на этой машине, а с любого её сетевого адреса. Из интернета их может быть не видно: файрвол на VPS эти порты, скорее всего, закрывает. Если порт откроют — до Redis или Postgres доберётся любой, не только ваш сайт.`,
-        do: "На кортадо в docker-compose у этих сервисов замените порты. Пример: было 6379:6379, нужно 127.0.0.1:6379:6379. Так же для 5432, 7474 и остальных оранжевых меток. Тогда к базе подключатся только программы на этом сервере. Orb44 файл сам не изменит.",
-      });
+      const names = [...new Set(held.map((r) => labelPort(r)))].join(", ");
+      notes.push(insideNote(hasStreet ? "listen-open-held" : "listen-open", "listen-open", { names }));
     }
   }
   if (pulse?.originA?.length && streetIp && !pulse.originA.includes(streetIp)) {
-    notes.push({
-      kind: "origin-mismatch",
-      title: "Адрес машины не совпал со снимком",
-      text: `На машине ${pulse.originA.join(", ")}, снаружи A=${streetIp}. Другой ящик или серый щит.`,
-      do: "Сверьте DNS A с тем VPS, куда поставили сателлит. Если сайт за Cloudflare — это ожидаемо, не инцидент.",
-    });
+    notes.push(insideNote("origin-mismatch", "origin-mismatch", { machine: pulse.originA.join(", "), street: streetIp }));
   }
   const loadHigh = Number(pulse?.load1) >= Math.max(2, cpuCount(pulse));
   const memHigh = pulse?.memTotal && pulse.memUsed / pulse.memTotal >= 0.85;
   const pr = pulse?.pressure || {};
   if (loadHigh || memHigh) {
     const top = pulse.top?.[0];
-    const who = top ? `${top.comm} ${top.cpuPct}%` : "процесс в топе не виден";
+    const who = top ? `${top.comm} ${top.cpuPct}%` : "";
     if (/auth_hot|auth_open/.test(incident)) {
-      notes.push({
-        kind: "load-street",
-        title: "Нагрузка и открытый вход",
-        text: `Машина под нагрузкой, снаружи открыт вход — похоже бьют во вход. Топ: ${who}.`,
-        do: "Сначала вход на витрине, не процессы. Сателлит здесь только подтверждает, что CPU живой.",
-      });
+      notes.push(insideNote("load-street", "load-street", { who }));
     } else {
-      notes.push({
-        kind: "load-local",
-        title: "Машина тяжёлая, витрина тихая",
-        text: `Нагрузка локальная, снаружи тихо — не атака витрины. Топ: ${who}.`,
-        do: "Смотрите процесс в топе (воркер, docker). WAF тут ни при чём.",
-      });
+      notes.push(insideNote("load-local", "load-local", { who }));
     }
   }
   const h = pulse.hardening || {};
@@ -1089,171 +1063,76 @@ export function compareInside(pulse, rec = {}, prev = null) {
   const ban = h.fail2ban;
   if (pulse.hardening) {
     if (!fw && !ban) {
-      notes.push({
-        kind: "hardening",
-        title: "Минимум защиты не виден",
-        text: "Нет включённого файрвола и нет fail2ban. Лишние порты и подбор SSH никто не режет.",
-        do: "На кортадо включите ufw и fail2ban. Orb44 пакеты сам не ставит.",
-      });
+      notes.push(insideNote("hardening-min", "hardening"));
     } else if (!fw) {
-      notes.push({
-        kind: "hardening",
-        title: "Файрвол не виден",
-        text: "Не нашлось включённого ufw, nftables или firewalld. Тогда оранжевые порты баз — это не «закрыто файрволом», а открыто в сеть сервера.",
-        do: "Включите ufw и закройте лишние порты. Orb44 файрвол сам не включает.",
-      });
+      notes.push(insideNote("hardening-fw", "hardening"));
     } else if (!ban) {
-      notes.push({
-        kind: "hardening",
-        title: "Нет защиты подбора SSH",
-        text: "fail2ban или sshguard не запущены. Повторные попытки входа по SSH ничем не режутся.",
-        do: "Поставьте и включите fail2ban на кортадо. Orb44 пакеты сам не ставит.",
-      });
+      notes.push(insideNote("hardening-ban", "hardening"));
     }
-    const sshBits = [];
-    if (h.sshPassword) sshBits.push("вход по паролю включён");
-    if (h.sshRoot) sshBits.push("root может зайти по SSH");
-    if (h.sshWorld && (h.sshPassword || h.sshRoot)) sshBits.push("порт 22 слушает всю сеть");
-    if (sshBits.length) {
-      notes.push({
-        kind: "hardening",
-        title: "SSH слабее, чем нужно",
-        text: `${sshBits.join(". ")}. Пароли не подбираем — это живые настройки sshd, не /etc/shadow.`,
-        do: "В sshd: PasswordAuthentication no и PermitRootLogin no. Порт 22 лучше не светить всей сети. Orb44 sshd сам не правит.",
-      });
+    if (h.sshPassword || h.sshRoot) {
+      notes.push(
+        insideNote("hardening-ssh", "hardening", {
+          sshPassword: Boolean(h.sshPassword),
+          sshRoot: Boolean(h.sshRoot),
+          sshWorld: Boolean(h.sshWorld && (h.sshPassword || h.sshRoot)),
+        })
+      );
     }
-    if (h.dockerApi) {
-      notes.push({
-        kind: "hardening",
-        title: "Docker API слушает сеть сервера",
-        text: "Порт 2375 или 2376 принимает подключения не только с этой машины. С улицы его может закрывать файрвол, но сокет уже не loopback.",
-        do: "Уберите публикацию Docker API наружу. Достаточно unix-сокета. Orb44 Docker сам не трогает.",
-      });
-    }
-    if (h.rebootNeeded) {
-      notes.push({
-        kind: "hardening",
-        title: "Ядро ждет перезагрузки",
-        text: "На диске есть /var/run/reboot-required — пакеты ядра встали, машина ещё на старом.",
-        do: "Запланируйте reboot в окно. Orb44 сервер сам не перезагружает.",
-      });
-    }
-    if (!h.timesync) {
-      notes.push({
-        kind: "hardening",
-        title: "Часы машины не синхронизируются",
-        text: "Не видно chrony, systemd-timesyncd или ntp. Кривые часы ломают TLS и разбор логов.",
-        do: "Включите systemd-timesyncd или chrony. Orb44 пакеты сам не ставит.",
-      });
-    }
-    if (h.apparmor === false && h.selinux === false) {
-      notes.push({
-        kind: "hardening",
-        title: "Нет AppArmor и SELinux",
-        text: "На Linux не видно ни AppArmor, ни enforcing SELinux. Это не дыра сама по себе, но процесс ничем не ограничен.",
-        do: "На Ubuntu обычно достаточно apparmor. Orb44 LSM сам не включает.",
-      });
-    }
-    if (Number(pulse.diskUsedPct) >= 85) {
-      notes.push({
-        kind: "hardening",
-        title: "Диск почти полный",
-        text: `Корневой раздел занят на ${pulse.diskUsedPct}%. Логи и апдейты начнут падать раньше, чем витрина.`,
-        do: "Почистите логи и неиспользуемые образы Docker. Orb44 файлы сам не удаляет.",
-      });
-    }
+    if (h.dockerApi) notes.push(insideNote("hardening-docker", "hardening"));
+    if (h.rebootNeeded) notes.push(insideNote("hardening-reboot", "hardening"));
+    if (!h.timesync) notes.push(insideNote("hardening-timesync", "hardening"));
+    if (h.apparmor === false && h.selinux === false) notes.push(insideNote("hardening-lsm", "hardening"));
+    if (Number(pulse.diskUsedPct) >= 85) notes.push(insideNote("hardening-disk", "hardening", { pct: pulse.diskUsedPct }));
     if (pulse.oom || Number(h.oomKills) > 0) {
-      notes.push({
-        kind: "hardening",
-        title: "Ядро убивало процессы по памяти",
-        text: Number(h.oomKills) > 0 ? `В vmstat oom_kill=${h.oomKills}. Кто-то уже упирался в RAM.` : "Пульс пометил OOM.",
-        do: "Смотрите топ по RAM и лимиты контейнеров. Orb44 процессы сам не убивает и не поднимает.",
-      });
+      notes.push(
+        Number(h.oomKills) > 0
+          ? insideNote("hardening-oom", "hardening", { oomKills: h.oomKills })
+          : insideNote("hardening-oom-flag", "hardening")
+      );
     }
     const banned = Number(h.fail2banBanned) || 0;
     if (banned > 0 && /auth_hot|auth_open/.test(incident)) {
-      notes.push({
-        kind: "stuffing",
-        title: "fail2ban копит баны, вход с улицы горячий",
-        text: `Сейчас в бане ${banned}. Пароли не подбираем — это чужой перебор, сателлит только считает.`,
-        do: "Смотрите fail2ban и форму входа на витрине. Orb44 пароли не перебирает.",
-      });
+      notes.push(insideNote("stuffing", "stuffing", { banned }));
     }
     const jails = Array.isArray(h.fail2banJails) ? h.fail2banJails : [];
     const mailJail = jails.find((j) => /postfix|dovecot|exim|sasl/i.test(j.name) && Number(j.banned) > 0);
     if (mailJail) {
-      notes.push({
-        kind: "mail-bans",
-        title: "fail2ban режет почтовый перебор",
-        text: `Jail ${mailJail.name}: сейчас в бане ${mailJail.banned}, ещё стучатся ${mailJail.failed}. Письма не читаем и не шлём — только счётчики jail.`,
-        do: "Это чужой перебор SMTP/IMAP, не рассылка с вашей очереди. Смотрите jail и SASL. Orb44 почту не трогает.",
-      });
+      notes.push(insideNote("mail-bans", "mail-bans", { jail: mailJail.name, banned: mailJail.banned, failed: mailJail.failed }));
     }
   }
   const apps = pulse?.apps || {};
   const sshFails = apps.sshFails;
   if (sshFails && Number(sshFails.failed) + Number(sshFails.invalid) >= 15) {
-    notes.push({
-      kind: "ssh-fails",
-      title: "SSH с улицы стучится",
-      text: `За ${sshFails.windowMin || 20} мин в journal: Failed password ${sshFails.failed}, Invalid user ${sshFails.invalid}. IP не сохраняем.`,
-      do: "Ключи вместо пароля и fail2ban на sshd. Orb44 логины не перебирает и journal наружу не выгружает.",
-    });
+    notes.push(
+      insideNote("ssh-fails", "ssh-fails", {
+        windowMin: sshFails.windowMin || 20,
+        failed: sshFails.failed,
+        invalid: sshFails.invalid,
+      })
+    );
   }
   const mail = apps.mail;
   if (mail?.openRelay) {
-    notes.push({
-      kind: "mail-relay",
-      title: "Похоже на открытый релей",
-      text: `${mail.kind || "почта"}: mynetworks содержит 0.0.0.0/0. Чужой может слать спам через этот ящик. Очередь и письма не читаем.`,
-      do: "В postfix сузьте mynetworks до локальной сети и оставьте reject_unauth_destination. Orb44 postconf сам не правит.",
-    });
+    notes.push(insideNote("mail-relay", "mail-relay", { kind: mail.kind || "mail" }));
   } else if (mail && Number(mail.queue) >= 50) {
-    notes.push({
-      kind: "mail-queue",
-      title: "Почтовая очередь толстая",
-      text: `${mail.kind || "почта"}: в очереди ${mail.queue} писем. Так бывает при рассылке или когда релей не принимает. Содержимое очереди не смотрим.`,
-      do: "На машине: postqueue -p / mailq — кто отправитель. Orb44 письма не шлёт и очередь не чистит.",
-    });
+    notes.push(insideNote("mail-queue", "mail-queue", { kind: mail.kind || "mail", queue: mail.queue }));
   } else if (mail?.world && mail.kind) {
     const hasMailJail = (h.fail2banJails || []).some((j) => /postfix|dovecot|exim|sasl/i.test(j.name));
     if (h.fail2ban && !hasMailJail) {
-      notes.push({
-        kind: "mail-open",
-        title: "Почта слушает улицу без jail",
-        text: `${mail.kind} открыт снаружи (${(mail.ports || []).join(", ") || "SMTP"}). fail2ban есть, но почтового jail не видно. Это не доказанный спам — только гигиена.`,
-        do: "Добавьте jail postfix/dovecot в fail2ban. Orb44 jail сам не ставит.",
-      });
+      notes.push(insideNote("mail-open", "mail-open", { kind: mail.kind, ports: (mail.ports || []).join(", ") || "SMTP" }));
     }
   }
   const vpn = apps.vpn;
   if (vpn?.kind === "pptp" || vpn?.kind === "l2tp") {
-    notes.push({
-      kind: "vpn-weak",
-      title: "Старый VPN на машине",
-      text: `${vpn.kind.toUpperCase()} слушает ${(vpn.ports || []).join(", ") || "сеть"}. Протокол слабый, ключи и конфиг не читаем.`,
-      do: "Уберите PPTP/L2TP, оставьте WireGuard или OpenVPN. Orb44 VPN сам не переключает.",
-    });
+    notes.push(insideNote("vpn-weak", "vpn-weak", { kind: vpn.kind.toUpperCase(), ports: (vpn.ports || []).join(", ") || "net" }));
   }
   const stuck = stuckFromTop(pulse?.top);
   if (stuck.length) {
-    const who = stuck.map((r) => `${r.comm} (${r.stat || "?"})`).join(", ");
-    notes.push({
-      kind: "stuck-proc",
-      title: "Процессы зависли или зомби",
-      text: `Состояние D/Z/T: ${who}. Так машина стоит на диске или мёртвых воркерах, а не «просто высокая нагрузка».`,
-      do: "Не убивайте с кабинета — его нет. На сервере: ps и диск, не WAF. Orb44 процессы сам не трогает.",
-    });
+    notes.push(insideNote("stuck-proc", "stuck-proc", { who: stuck.map((r) => `${r.comm} (${r.stat || "?"})`).join(", ") }));
   }
   const miners = minersFromTop(pulse?.top);
   if (miners.length) {
-    const who = miners.map((r) => `${r.comm} ${r.cpuPct}%`).join(", ");
-    notes.push({
-      kind: "crypto-miner",
-      title: "Похоже на майнер",
-      text: `${who}. Имя из известного списка криптомайнеров или почти 100% CPU при маленьком RSS — типичный признак чужого майнера, не «Перегруз» легитимным java.`,
-      do: "На сервере остановите процесс и проверьте, как он появился (crontab, docker, скомпрометированный SSH). Orb44 процессы сам не убивает.",
-    });
+    notes.push(insideNote("crypto-miner", "crypto-miner", { who: miners.map((r) => `${r.comm} ${r.cpuPct}%`).join(", ") }));
   }
   const hot = hotFromTop(pulse?.top, pulse?.memTotal).filter((r) => !looksLikeMiner(r));
   if (hot.length && !loadHigh) {
@@ -1263,29 +1142,15 @@ export function compareInside(pulse, rec = {}, prev = null) {
       .map((r) => {
         const ram = Number(r.rssMb) >= floor;
         const cpu = Number(r.cpuPct) >= 70;
-        if (ram && !cpu) return `${r.comm} ${r.rssMb} МБ RAM (CPU ${r.cpuPct}%)`;
+        if (ram && !cpu) return `${r.comm} ${r.rssMb} MB RAM (CPU ${r.cpuPct}%)`;
         if (cpu && !ram) return `${r.comm} CPU ${r.cpuPct}%`;
         return `${r.comm} ${r.cpuPct}%/${r.rssMb}M`;
       })
       .join(", ");
-    notes.push({
-      kind: "hot-proc",
-      title: ramOnly ? "Процесс держит много RAM" : "Сервис жрёт CPU или RAM",
-      text: ramOnly
-        ? `${who}. В «Перегруз» попадает процесс из топа от ${floor} МБ RSS (30% RAM, минимум 1 ГБ). CPU тут ни при чём: load может быть спокойным.`
-        : `Топ без общей перегрузки load: ${who}. Воркер уже упёрся, витрина может ещё отвечать.`,
-      do: ramOnly
-        ? "Это не атака и не 100% процессора. Смотрите, что за процесс и сколько ему реально нужно. Orb44 его не рестартит и память не ограничивает."
-        : "Смотрите этот процесс (php-fpm, node, mysql). Orb44 его не рестартит.",
-    });
+    notes.push(insideNote(ramOnly ? "hot-proc-ram" : "hot-proc", "hot-proc", { who, floor }));
   }
   if (Number(pr.conntrackPct) >= 80) {
-    notes.push({
-      kind: "conntrack",
-      title: "Таблица соединений почти полная",
-      text: `conntrack ${pr.conntrackUsed}/${pr.conntrackMax} (${pr.conntrackPct}%). Новые сессии начнут отбрасываться — с улицы это 502, изнутри это очередь.`,
-      do: "Ищите кто держит кучу TCP. Не открывайте порты «чтобы помогло».",
-    });
+    notes.push(insideNote("conntrack", "conntrack", { used: pr.conntrackUsed, max: pr.conntrackMax, pct: pr.conntrackPct }));
   }
   const prevPr = prev?.pressure || {};
   const overDelta =
@@ -1297,69 +1162,30 @@ export function compareInside(pulse, rec = {}, prev = null) {
       ? Number(pr.listenDrops) - Number(prevPr.listenDrops)
       : 0;
   if (overDelta > 0 || dropDelta > 0) {
-    notes.push({
-      kind: "backlog",
-      title: "Очередь accept переполняется",
-      text: `С прошлого пульса ListenOverflows +${overDelta}, ListenDrops +${dropDelta}. Сервис не успевает брать соединения.`,
-      do: "Больше воркеров или меньше входа. Orb44 лимиты сам не поднимает.",
-    });
+    notes.push(insideNote("backlog", "backlog", { overDelta, dropDelta }));
   }
   if (Number(pr.filePct) >= 85) {
-    notes.push({
-      kind: "files",
-      title: "Заканчиваются файловые дескрипторы",
-      text: `Открыто ${pr.filePct}% лимита (${pr.fileUsed}/${pr.fileMax}). Типичный «внезапно не открывается сокет».`,
-      do: "Кто держит файлы: воркер или утечка. Orb44 ulimit сам не меняет.",
-    });
+    notes.push(insideNote("files", "files", { pct: pr.filePct, used: pr.fileUsed, max: pr.fileMax }));
   }
   if (pr.clockOffsetSec != null && Math.abs(pr.clockOffsetSec) >= 5) {
-    notes.push({
-      kind: "clock",
-      title: "Часы машины уехали",
-      text: `Смещение NTP ${pr.clockOffsetSec} с. TLS и метки Watch начнут врать.`,
-      do: "Почините chrony/timesyncd. Orb44 время сам не ставит.",
-    });
+    notes.push(insideNote("clock", "clock", { offset: pr.clockOffsetSec }));
   }
   if (Number(pr.cgroupOom) > 0 || Number(pr.memFailcnt) > 20) {
-    notes.push({
-      kind: "cgroup-oom",
-      title: "Контейнер или cgroup упирается в память",
-      text: `cgroup oom=${pr.cgroupOom || 0}, failcnt=${pr.memFailcnt || 0}. Это не journal — счётчик ядра.`,
-      do: "Лимит памяти контейнера, не WAF. Orb44 лимиты сам не поднимает.",
-    });
+    notes.push(insideNote("cgroup-oom", "cgroup-oom", { oom: pr.cgroupOom || 0, failcnt: pr.memFailcnt || 0 }));
   }
   if (prev?.listen && pulse?.listen) {
     const swap = httpListenSwapped(prev, pulse);
-    if (swap) {
-      notes.push({
-        kind: "listen-swap",
-        title: "На 80/443 сменился процесс",
-        text: `Было ${swap.from}, стало ${swap.to}. Бинарь витрины подменили или рядом встал другой сервер.`,
-        do: "Сверьте, кто должен слушать HTTPS. Orb44 процесс сам не откатывает.",
-      });
-    }
+    if (swap) notes.push(insideNote("listen-swap", "listen-swap", { from: swap.from, to: swap.to }));
   }
   const failed = cleanFailedUnits(pulse?.failedUnit);
-  if (failed.length) {
-    notes.push({
-      kind: "failed-unit",
-      title: "Упал systemd-юнит",
-      text: `${failed.join(", ")} не запустился.`,
-      do: "На машине: systemctl status этого юнита. Orb44 его сам не поднимает.",
-    });
-  }
+  if (failed.length) notes.push(insideNote("failed-unit", "failed-unit", { units: failed.join(", ") }));
   const errs = (pulse?.errors || []).filter((e) => !isSatLogNoise(e?.text));
   if (errs.length) {
     const line = errs
       .slice(0, 3)
       .map((e) => `${e.source} ${e.name}: ${e.text}`)
       .join(" · ");
-    notes.push({
-      kind: "runtime-error",
-      title: "Ошибки на машине",
-      text: line,
-      do: "Это хвост журнала / docker / kubectl / nginx, который вы разрешили при login. Orb44 ничего не чинит.",
-    });
+    notes.push(insideNote("runtime-error", "runtime-error", { line }));
   }
   return notes;
 }
@@ -1417,98 +1243,51 @@ export function insideWatchReasons(pulse, prev, rec = {}) {
   const loadHigh = Number(pulse?.load1) >= Math.max(2, cpuCount(pulse));
   const memHigh = pulse?.memTotal && pulse.memUsed / pulse.memTotal >= 0.85;
   const top = pulse?.top?.[0];
-  const who = top ? `${top.comm} ${top.cpuPct}%` : "процесс в топе не виден";
+  const who = top ? `${top.comm} ${top.cpuPct}%` : "";
   if (loadHigh || memHigh) {
-    if (streetHot) {
-      notes.push({
-        kind: "stuffing",
-        title: "Нагрузка и открытый вход",
-        text: `Машина под нагрузкой, снаружи горячий вход — похоже бьют во вход, не локальный воркер. Топ: ${who}. Пароли не подбираем.`,
-      });
-    } else {
-      notes.push({
-        kind: "load-local",
-        title: "Машина тяжёлая, витрина тихая",
-        text: `Нагрузка локальная, с улицы не видно атаки. Топ: ${who}.`,
-      });
-    }
+    if (streetHot) notes.push(insideNote("stuffing-watch", "stuffing", { who }));
+    else notes.push(insideNote("load-local", "load-local", { who }));
   }
   const banJump = fail2banBanJump(pulse, prev);
-  if (banJump) {
-    notes.push({
-      kind: "stuffing-ssh",
-      title: "fail2ban копит баны SSH",
-      text: `Было ${banJump.from}, стало ${banJump.to}. Чужой перебор SSH, не вход на витрину. Пароли не подбираем.`,
-    });
-  }
+  if (banJump) notes.push(insideNote("stuffing-ssh", "stuffing-ssh", { from: banJump.from, to: banJump.to }));
   const sshFails = pulse?.apps?.sshFails;
   if (!banJump && sshFails && Number(sshFails.failed) >= 30) {
-    notes.push({
-      kind: "ssh-fails",
-      title: "SSH Failed password пачками",
-      text: `За ${sshFails.windowMin || 20} мин Failed password ${sshFails.failed}. IP не сохраняем.`,
-    });
+    notes.push(insideNote("ssh-fails-watch", "ssh-fails", { windowMin: sshFails.windowMin || 20, failed: sshFails.failed }));
   }
   if (pulse?.apps?.mail?.openRelay) {
-    notes.push({
-      kind: "mail-relay",
-      title: "Открытый почтовый релей",
-      text: `${pulse.apps.mail.kind || "почта"}: mynetworks 0.0.0.0/0.`,
-    });
+    notes.push(insideNote("mail-relay-watch", "mail-relay", { kind: pulse.apps.mail.kind || "mail" }));
   }
   const q = Number(pulse?.apps?.mail?.queue);
   const prevQ = prev?.apps?.mail?.queue;
   if (Number.isFinite(q) && q >= 80 && (prevQ == null || q >= Number(prevQ) + 40)) {
-    notes.push({
-      kind: "mail-queue",
-      title: "Почтовая очередь растёт",
-      text: prevQ != null ? `Было ${prevQ}, стало ${q}.` : `В очереди ${q} писем.`,
-    });
+    notes.push(
+      prevQ != null
+        ? insideNote("mail-queue-grew", "mail-queue", { prev: prevQ, queue: q })
+        : insideNote("mail-queue-watch", "mail-queue", { queue: q })
+    );
   }
   if (prev) {
     const nowPorts = insideServiceWorldPorts(pulse);
     const prevPorts = new Set(insideServiceWorldPorts(prev));
     const added = nowPorts.filter((p) => !prevPorts.has(p));
-    if (added.length) {
-      notes.push({
-        kind: "listen-new",
-        title: "Новый служебный порт на 0.0.0.0",
-        text: `Появились ${added.join(", ")}. С прошлого пульса их не было.`,
-      });
-    }
+    if (added.length) notes.push(insideNote("listen-new", "listen-new", { ports: added.join(", ") }));
     const swap = httpListenSwapped(prev, pulse);
-    if (swap) {
-      notes.push({
-        kind: "listen-swap",
-        title: "На 80/443 сменился процесс",
-        text: `Было ${swap.from}, стало ${swap.to}.`,
-      });
-    }
+    if (swap) notes.push(insideNote("listen-swap-watch", "listen-swap", { from: swap.from, to: swap.to }));
   }
   const freshFailed = freshFailedUnits(pulse, prev);
-  if (freshFailed.length) {
-    notes.push({
-      kind: "failed-unit",
-      title: "Упал systemd-юнит",
-      text: `${freshFailed.join(", ")} не запустился.`,
-    });
-  }
+  if (freshFailed.length) notes.push(insideNote("failed-unit", "failed-unit", { units: freshFailed.join(", ") }));
   /* journal/docker tails stay on the machine card — not Watch/Telegram */
   if (stuckFromTop(pulse?.top).length) {
-    notes.push({
-      kind: "stuck-proc",
-      title: "Процессы зависли",
-      text: stuckFromTop(pulse.top)
-        .map((r) => `${r.comm} ${r.stat}`)
-        .join(", "),
-    });
+    notes.push(
+      insideNote("stuck-proc-watch", "stuck-proc", {
+        who: stuckFromTop(pulse.top)
+          .map((r) => `${r.comm} ${r.stat}`)
+          .join(", "),
+      })
+    );
   }
   if (Number(pulse?.pressure?.conntrackPct) >= 80) {
-    notes.push({
-      kind: "conntrack",
-      title: "conntrack почти полный",
-      text: `${pulse.pressure.conntrackPct}%`,
-    });
+    notes.push(insideNote("conntrack-watch", "conntrack", { pct: pulse.pressure.conntrackPct }));
   }
   const overDelta =
     pulse?.pressure?.listenOverflows != null && prev?.pressure?.listenOverflows != null
@@ -1519,19 +1298,11 @@ export function insideWatchReasons(pulse, prev, rec = {}) {
       ? Number(pulse.pressure.listenDrops) - Number(prev.pressure.listenDrops)
       : 0;
   if (overDelta > 0 || dropDelta > 0) {
-    notes.push({
-      kind: "backlog",
-      title: "Очередь accept растёт",
-      text: `+${overDelta} overflows, +${dropDelta} drops с прошлого пульса.`,
-    });
+    notes.push(insideNote("backlog-watch", "backlog", { overDelta, dropDelta }));
   }
   const streetIp = rec.ticket?.ip || rec.watch?.current?.ip || rec.watch?.last?.ip || null;
   if (pulse?.originA?.length && streetIp && !pulse.originA.includes(streetIp)) {
-    notes.push({
-      kind: "origin-mismatch",
-      title: "Адрес машины не совпал со снимком",
-      text: `На машине ${pulse.originA.join(", ")}, снаружи A=${streetIp}.`,
-    });
+    notes.push(insideNote("origin-mismatch", "origin-mismatch", { machine: pulse.originA.join(", "), street: streetIp }));
   }
   return notes;
 }

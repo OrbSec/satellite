@@ -17,9 +17,9 @@ Node 18+. Linux or macOS.
 Perimeter snapshot on this box — load, RAM, disk, listeners with access labels, process top. **Live only**: no history, no Watch alerts, no street delta (those are on the paid plan).
 
 ```bash
-npx @orb44/cli@0.1.20 top
-npx @orb44/cli@0.1.20 top --interval 1
-npx @orb44/cli@0.1.20 top --once    # one frame, then exit
+npx @orb44/cli@0.1.21 top
+npx @orb44/cli@0.1.21 top --interval 1
+npx @orb44/cli@0.1.21 top --once    # one frame, then exit
 ```
 
 Keys: `q` quit · `Ctrl+C`.
@@ -27,17 +27,17 @@ Keys: `q` quit · `Ctrl+C`.
 ## Pair with the dashboard
 
 ```bash
-npx @orb44/cli@0.1.20 login --url https://app.orb44.com
+npx @orb44/cli@0.1.21 login --url https://app.orb44.com
 ```
 
 Open the printed link while signed into the dashboard, confirm the domain, then optionally install the systemd daemon (default: no).
 
 ```bash
-npx @orb44/cli@0.1.20 status
-npx @orb44/cli@0.1.20 pulse
-npx @orb44/cli@0.1.20 install
+npx @orb44/cli@0.1.21 status
+npx @orb44/cli@0.1.21 pulse
+npx @orb44/cli@0.1.21 install
 orb44 update
-npx @orb44/cli@0.1.20 logout
+npx @orb44/cli@0.1.21 logout
 ```
 
 Do **not** run bare `npx @orb44/cli` — caches go stale. Pin the version or use `orb44` after install.
