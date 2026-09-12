@@ -878,7 +878,10 @@ async function cmdUpdate() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "orb44-upd-"));
   let wrote = [];
   try {
-    const pkg = await unpackTarball(meta.tarball, tmp);
+    const pkg = await unpackTarball(meta.tarball, tmp, fetch, {
+      integrity: meta.integrity,
+      shasum: meta.shasum,
+    });
     const blocked = [];
     for (const root of stale) {
       try {
