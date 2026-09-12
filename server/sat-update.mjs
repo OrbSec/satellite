@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 export const CLI_PACKAGE = "@orb44/cli";
@@ -156,8 +157,27 @@ export async function fetchLatestMeta(fetchFn = fetch) {
   const j = await r.json();
   const version = j?.version;
   const tarball = j?.dist?.tarball;
+  const integrity = j?.dist?.integrity || null;
+  const shasum = j?.dist?.shasum || null;
   if (!version || !tarball) throw new Error("registry meta");
-  return { version: String(version), tarball: canonicalTarballUrl(tarball) };
+  if (!integrity && !shasum) throw new Error("registry meta: missing integrity");
+  return { version: String(version), tarball: canonicalTarballUrl(tarball), integrity, shasum };
+}
+
+/** Verify a downloaded tarball against the registry-provided integrity/shasum before it is trusted. */
+export function verifyTarballIntegrity(buf, { integrity, shasum } = {}) {
+  if (integrity) {
+    const [alg, expected] = String(integrity).split("-");
+    const actual = crypto.createHash(alg).update(buf).digest("base64");
+    if (actual !== expected) throw new Error("tarball integrity mismatch");
+    return;
+  }
+  if (shasum) {
+    const actual = crypto.createHash("sha1").update(buf).digest("hex");
+    if (actual !== shasum) throw new Error("tarball integrity mismatch");
+    return;
+  }
+  throw new Error("tarball integrity missing");
 }
 
 /** npm metadata uses /@scope/name/; GET of the tarball is more reliable as /@scope%2fname/. */
@@ -171,7 +191,12 @@ export function canonicalTarballUrl(url) {
   }
 }
 
-export async function unpackTarball(url, tmp, fetchFn = fetch, { retries = 4, delayMs = 1500 } = {}) {
+export async function unpackTarball(
+  url,
+  tmp,
+  fetchFn = fetch,
+  { retries = 4, delayMs = 1500, integrity, shasum } = {}
+) {
   const href = canonicalTarballUrl(url);
   let last = "fail";
   let buf = null;
@@ -186,6 +211,7 @@ export async function unpackTarball(url, tmp, fetchFn = fetch, { retries = 4, de
     if (i < retries - 1 && delayMs) await new Promise((ok) => setTimeout(ok, delayMs * (i + 1)));
   }
   if (!buf) throw new Error(`tarball ${last}`);
+  verifyTarballIntegrity(buf, { integrity, shasum });
   const tgz = path.join(tmp, "pkg.tgz");
   fs.writeFileSync(tgz, buf);
   const unpack = path.join(tmp, "unpack");
