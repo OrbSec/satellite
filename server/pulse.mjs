@@ -5,6 +5,7 @@ import { execFileSync } from "node:child_process";
 import { t } from "./sat-i18n.mjs";
 import { insideNote } from "../web/inside-notes.js";
 import { collectRuntime, sanitizeErrors, sanitizeGrants, sanitizeRuntime, isSatLogNoise } from "./sat-logs.mjs";
+import { probeDockerSocket, unexpectedDockerGroup } from "./sat-access.mjs";
 
 const COMM_RE = /[^a-zA-Z0-9._+-]/g;
 
@@ -324,6 +325,13 @@ export function sanitizePulse(raw = {}) {
     apparmor: tri(raw.hardening?.apparmor),
     selinux: tri(raw.hardening?.selinux),
     dockerApi: Boolean(raw.hardening?.dockerApi),
+    dockerSockWorld: Boolean(raw.hardening?.dockerSockWorld),
+    dockerSockMode: sanitizeDockerMode(raw.hardening?.dockerSockMode),
+    dockerGroup: sanitizeDockerGroup(raw.hardening?.dockerGroup),
+    dockerPrivileged: Boolean(raw.hardening?.dockerPrivileged),
+    dockerHostMount: Boolean(raw.hardening?.dockerHostMount),
+    dockerEscape: sanitizeDockerEscape(raw.hardening?.dockerEscape),
+    imageCves: sanitizeImageCves(raw.hardening?.imageCves),
     oomKills: Math.max(0, Math.min(999, Number(raw.hardening?.oomKills) || 0)),
   };
   const limited = Boolean(raw.limited);
@@ -358,6 +366,148 @@ const JAIL_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,40}$/;
 const CMS_KINDS = new Set(["wordpress", "drupal", "bitrix", "joomla"]);
 const MAIL_KINDS = new Set(["postfix", "exim", "sendmail"]);
 const VPN_KINDS = new Set(["wireguard", "openvpn", "ipsec", "pptp", "l2tp"]);
+const DOCKER_GROUP_USER = /^[A-Za-z_][A-Za-z0-9_.-]{0,31}$/;
+
+function sanitizeDockerMode(raw) {
+  const s = String(raw || "").replace(/[^0-7]/g, "").slice(0, 4);
+  return s.length >= 3 ? s : null;
+}
+
+function sanitizeDockerGroup(raw) {
+  const list = Array.isArray(raw) ? raw : [];
+  return [...new Set(list.map((x) => String(x || "").trim()).filter((s) => DOCKER_GROUP_USER.test(s)))].slice(0, 12);
+}
+
+function sanitizeDockerEscape(raw) {
+  const out = [];
+  for (const row of Array.isArray(raw) ? raw : []) {
+    const name = sanitizeComm(row?.name) || "container";
+    const privileged = Boolean(row?.privileged);
+    const hostRoot = Boolean(row?.hostRoot);
+    if (!privileged && !hostRoot) continue;
+    out.push({ name: name.slice(0, 40), privileged, hostRoot });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+const IMAGE_REF_RE = /^[A-Za-z0-9._:/-]{1,120}$/;
+const IMAGE_CVE_RE = /^(CVE-\d{4}-\d{4,}|EOL[ A-Za-z0-9./-]{2,40})$/;
+
+function sanitizeImageCves(raw) {
+  const out = [];
+  for (const row of Array.isArray(raw) ? raw : []) {
+    const name = sanitizeComm(row?.name) || "container";
+    const image = String(row?.image || "").slice(0, 120);
+    if (!IMAGE_REF_RE.test(image)) continue;
+    const version = String(row?.version || "").slice(0, 24);
+    if (!/^\d+(?:\.\d+){0,3}$/.test(version)) continue;
+    const product = String(row?.product || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]/g, "")
+      .slice(0, 24);
+    const cve = String(row?.cve || "").slice(0, 48);
+    if (!product || !IMAGE_CVE_RE.test(cve)) continue;
+    out.push({ name: name.slice(0, 40), image, version, product, cve });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function verLt(a, b) {
+  const pa = String(a || "").split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = String(b || "").split(".").map((n) => parseInt(n, 10) || 0);
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i++) {
+    if ((pa[i] || 0) < (pb[i] || 0)) return true;
+    if ((pa[i] || 0) > (pb[i] || 0)) return false;
+  }
+  return false;
+}
+
+/** Running image tag vs a small curated CVE table. No pull, no layer scan, no Env. */
+export const IMAGE_CVE_CATALOG = [
+  { id: "nginx", re: /(?:^|\/)nginx(?::|$)/i, rules: [{ lt: "1.22.1", cve: "CVE-2022-41741" }, { lt: "1.26.2", cve: "CVE-2024-7347" }] },
+  { id: "redis", re: /(?:^|\/)redis(?::|$)/i, rules: [{ lt: "7.2.5", cve: "CVE-2024-31449" }] },
+  { id: "postgres", re: /(?:^|\/)postgres(?:ql)?(?::|$)/i, rules: [{ lt: "13", cve: "EOL PostgreSQL 12" }] },
+  { id: "mysql", re: /(?:^|\/)mysql(?::|$)/i, rules: [{ lt: "8.0.36", cve: "EOL MySQL 8.0" }] },
+  { id: "mariadb", re: /(?:^|\/)mariadb(?::|$)/i, rules: [{ lt: "10.6.18", cve: "EOL MariaDB 10.5" }] },
+  { id: "wordpress", re: /(?:^|\/)wordpress(?::|$)/i, rules: [{ lt: "6.4.3", cve: "CVE-2024-31210" }] },
+  { id: "elasticsearch", re: /(?:^|\/)elasticsearch(?::|$)/i, rules: [{ lt: "7.17.19", cve: "EOL Elasticsearch 7" }] },
+  { id: "n8n", re: /(?:^|\/)n8n(?::|$)/i, cve: "CVE-2025-68613", vuln: n8nExprRce },
+];
+
+/** CVE-2025-68613: n8n >= 0.211.0, fixed in 1.120.4 / 1.121.1 / 1.122.0. */
+function n8nExprRce(ver) {
+  if (verLt(ver, "0.211.0")) return false;
+  if (!verLt(ver, "1.120.4") && verLt(ver, "1.121.0")) return false;
+  if (ver === "1.121.0") return true;
+  if (!verLt(ver, "1.121.1") && verLt(ver, "1.122.0")) return false;
+  return verLt(ver, "1.122.0");
+}
+
+export function parseDockerImageRef(raw) {
+  const s = String(raw || "").trim();
+  if (!s || /^sha256:/i.test(s)) return null;
+  const noDigest = s.replace(/@sha256:[0-9a-f]{32,}$/i, "");
+  const last = noDigest.split("/").pop() || "";
+  const tag = /:([^:/]+)$/.exec(last)?.[1] || null;
+  if (!tag || /^latest$/i.test(tag)) return { image: noDigest.slice(0, 120), tag: tag || "latest", version: null };
+  const version = /^(\d+(?:\.\d+){0,3})/.exec(tag)?.[1] || null;
+  return { image: noDigest.slice(0, 120), tag: tag.slice(0, 40), version };
+}
+
+export function parseDockerInspectImages(raw) {
+  let arr;
+  try {
+    const parsed = JSON.parse(String(raw || "[]"));
+    arr = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const c of arr.slice(0, 32)) {
+    const name = sanitizeComm(String(c?.Name || "").replace(/^\//, "")) || "container";
+    const image = String(c?.Config?.Image || "").slice(0, 180);
+    const ref = parseDockerImageRef(image);
+    if (!ref) continue;
+    out.push({ name: name.slice(0, 40), image: ref.image, tag: ref.tag, version: ref.version });
+  }
+  return out.slice(0, 16);
+}
+
+export function matchImageCves(images = []) {
+  const hits = [];
+  const seen = new Set();
+  for (const row of images || []) {
+    const blob = `${row.image || ""}`;
+    for (const cat of IMAGE_CVE_CATALOG) {
+      if (!cat.re.test(blob)) continue;
+      const ver = row.version;
+      if (!ver) continue;
+      let cve = null;
+      if (typeof cat.vuln === "function") {
+        if (!cat.vuln(ver)) continue;
+        cve = cat.cve;
+      } else {
+        const rule = (cat.rules || []).find((r) => verLt(ver, r.lt));
+        if (!rule) continue;
+        cve = rule.cve;
+      }
+      const key = `${cat.id}:${ver}:${cve}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hits.push({
+        name: String(row.name || "container").slice(0, 40),
+        image: String(row.image || "").slice(0, 120),
+        version: ver,
+        product: cat.id,
+        cve,
+      });
+    }
+  }
+  return hits.slice(0, 8);
+}
 
 function sanitizePortList(raw) {
   return [...new Set((Array.isArray(raw) ? raw : []).map((n) => Number(n)).filter((n) => n > 0 && n < 65536))].slice(0, 8);
@@ -778,6 +928,8 @@ export function collectHardening(listen = []) {
   const ssh = parseSshdT(runOut("sshd", ["-T"]) || runOut("/usr/sbin/sshd", ["-T"]));
   const sshWorld = listen.some((r) => exposed(r.addr) && r.port === 22);
   const dockerApi = listen.some((r) => exposed(r.addr) && (r.port === 2375 || r.port === 2376));
+  const dockerSock = probeDockerSocket();
+  const dockerInspect = collectDockerInspect();
   let timesync = null;
   if (runOk("systemctl", ["is-active", "chrony"]) || runOk("systemctl", ["is-active", "chronyd"])) timesync = "chrony";
   else if (runOk("systemctl", ["is-active", "systemd-timesyncd"])) timesync = "systemd-timesyncd";
@@ -813,6 +965,13 @@ export function collectHardening(listen = []) {
     apparmor,
     selinux,
     dockerApi,
+    dockerSockWorld: dockerSock.dockerSockWorld,
+    dockerSockMode: dockerSock.dockerSockMode,
+    dockerGroup: dockerSock.dockerGroup,
+    dockerPrivileged: dockerInspect.privileged,
+    dockerHostMount: dockerInspect.hostMount,
+    dockerEscape: dockerInspect.names,
+    imageCves: matchImageCves(dockerInspect.images),
     oomKills,
   };
 }
@@ -991,6 +1150,50 @@ export function collectApps({ listen = [], top = [], sshFails = null } = {}) {
   };
 }
 
+export function parseDockerInspectEscape(raw) {
+  let arr;
+  try {
+    const parsed = JSON.parse(String(raw || "[]"));
+    arr = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+  } catch {
+    return { privileged: false, hostMount: false, names: [] };
+  }
+  const names = [];
+  let privileged = false;
+  let hostMount = false;
+  for (const c of arr.slice(0, 32)) {
+    const name = sanitizeComm(String(c?.Name || "").replace(/^\//, "")) || "container";
+    const priv = Boolean(c?.HostConfig?.Privileged);
+    const binds = Array.isArray(c?.HostConfig?.Binds) ? c.HostConfig.Binds : [];
+    const mounts = Array.isArray(c?.Mounts) ? c.Mounts : Array.isArray(c?.HostConfig?.Mounts) ? c.HostConfig.Mounts : [];
+    const rootBind = binds.some((b) => String(b).split(":")[0] === "/");
+    const rootMount = mounts.some((m) => {
+      const src = String(m?.Source || "");
+      const typ = String(m?.Type || m?.type || "bind");
+      return src === "/" && typ !== "volume";
+    });
+    const mount = rootBind || rootMount;
+    if (priv || mount) {
+      privileged = privileged || priv;
+      hostMount = hostMount || mount;
+      names.push({ name: name.slice(0, 40), privileged: priv, hostRoot: mount });
+    }
+  }
+  return { privileged, hostMount, names: names.slice(0, 8) };
+}
+
+function collectDockerInspect() {
+  const ids = String(runOut("docker", ["ps", "-q"]) || "")
+    .trim()
+    .split(/\s+/)
+    .filter((id) => /^[0-9a-f]{6,64}$/i.test(id))
+    .slice(0, 24);
+  if (!ids.length) return { privileged: false, hostMount: false, names: [], images: [] };
+  const raw = runOut("docker", ["inspect", ...ids]);
+  const escape = parseDockerInspectEscape(raw);
+  return { ...escape, images: parseDockerInspectImages(raw) };
+}
+
 export function gradeInside(pulse = {}) {
   const listen = pulse.listen || [];
   const h = pulse.hardening || {};
@@ -1004,7 +1207,10 @@ export function gradeInside(pulse = {}) {
   const loadHigh = Number(pulse.load1) >= Math.max(2, cpuCount(pulse));
   const connHot = Number(pr.conntrackPct) >= 90;
   const stuck = stuckFromTop(pulse.top).length > 0;
-  if (h.dockerApi) return "D";
+  const dockerNet = Boolean(h.dockerApi || h.dockerSockWorld);
+  const dockerEscape = Boolean(h.dockerPrivileged || h.dockerHostMount);
+  const imageDrift = Array.isArray(h.imageCves) && h.imageCves.length > 0;
+  if (dockerNet) return "D";
   if (h.sshPassword && h.sshRoot && h.sshWorld) return "D";
   if (!fw && exposedAdmin.length) return "D";
   if (!fw && !ban) return "D";
@@ -1012,9 +1218,10 @@ export function gradeInside(pulse = {}) {
   if (exposedAdmin.length || h.sshPassword || h.sshRoot) return "C";
   if (!fw || !ban) return "C";
   if (pulse?.apps?.mail?.openRelay) return "C";
-  if (diskHigh || oom || h.rebootNeeded || !h.timesync || loadHigh || connHot || stuck || pulse.failedUnit || (pulse.errors || []).some((e) => !isSatLogNoise(e?.text))) return "C";
-  if (fw && ban && updates && h.timesync && !h.sshPassword && !h.sshRoot && !exposedAdmin.length && !h.dockerApi) return "A";
-  if (fw && ban && !exposedAdmin.length && !h.dockerApi) return "B";
+  if (dockerEscape) return "C";
+  if (diskHigh || oom || h.rebootNeeded || !h.timesync || loadHigh || connHot || stuck || pulse.failedUnit || imageDrift || (pulse.errors || []).some((e) => !isSatLogNoise(e?.text))) return "C";
+  if (fw && ban && updates && h.timesync && !h.sshPassword && !h.sshRoot && !exposedAdmin.length && !dockerNet && !dockerEscape && !imageDrift) return "A";
+  if (fw && ban && !exposedAdmin.length && !dockerNet && !dockerEscape) return "B";
   return "C";
 }
 
@@ -1079,6 +1286,24 @@ export function compareInside(pulse, rec = {}, prev = null) {
       );
     }
     if (h.dockerApi) notes.push(insideNote("hardening-docker", "hardening"));
+    if (h.dockerSockWorld) notes.push(insideNote("hardening-docker-sock", "hardening", { mode: h.dockerSockMode || "???" }));
+    const extraDocker = unexpectedDockerGroup(h.dockerGroup);
+    if (extraDocker.length) notes.push(insideNote("hardening-docker-group", "hardening", { who: extraDocker.join(", ") }));
+    if (h.dockerPrivileged) {
+      const names = (h.dockerEscape || []).filter((r) => r.privileged).map((r) => r.name).join(", ") || "container";
+      notes.push(insideNote("hardening-docker-priv", "hardening", { names }));
+    }
+    if (h.dockerHostMount) {
+      const names = (h.dockerEscape || []).filter((r) => r.hostRoot).map((r) => r.name).join(", ") || "container";
+      notes.push(insideNote("hardening-docker-mount", "hardening", { names }));
+    }
+    if ((h.imageCves || []).length) {
+      const names = h.imageCves
+        .map((r) => `${r.product || r.name}:${r.version}`)
+        .slice(0, 4)
+        .join(", ");
+      notes.push(insideNote("hardening-image-cve", "hardening", { names, cve: h.imageCves[0].cve }));
+    }
     if (h.rebootNeeded) notes.push(insideNote("hardening-reboot", "hardening"));
     if (!h.timesync) notes.push(insideNote("hardening-timesync", "hardening"));
     if (h.apparmor === false && h.selinux === false) notes.push(insideNote("hardening-lsm", "hardening"));

@@ -192,3 +192,54 @@ export function accessManualHints(user, access, { spawn = run } = {}) {
   }
   return lines;
 }
+
+const DOCKER_SOCK_PATHS = [DOCKER_SOCK, "/run/docker.sock"];
+const DOCKER_GROUP_USER = /^[A-Za-z_][A-Za-z0-9_.-]{0,31}$/;
+const DOCKER_GROUP_EXPECTED = new Set(["root", "orb44"]);
+
+/** Unix permission bits from fs.Stats.mode — world-write is the root-equivalent misconfig. */
+export function parseStatMode(mode) {
+  const perm = Number(mode) & 0o777;
+  return {
+    mode: perm.toString(8).padStart(3, "0"),
+    worldWrite: Boolean(perm & 0o002),
+    worldRead: Boolean(perm & 0o004),
+  };
+}
+
+/** `getent group docker` → usernames already in the group (safe-read, no usermod). */
+export function parseGetentGroupMembers(text) {
+  const line = String(text || "").trim().split("\n")[0];
+  if (!line.includes(":")) return [];
+  const members = (line.split(":")[3] || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => DOCKER_GROUP_USER.test(s));
+  return [...new Set(members)].slice(0, 12);
+}
+
+export function unexpectedDockerGroup(members = []) {
+  return (Array.isArray(members) ? members : []).filter((m) => !DOCKER_GROUP_EXPECTED.has(String(m)));
+}
+
+/**
+ * World-writable docker.sock and current docker-group members.
+ * Probe only — does not chmod, usermod, or talk to the Docker API.
+ */
+export function probeDockerSocket({ exists = fs.existsSync, stat = (p) => fs.statSync(p), spawn = run } = {}) {
+  const sockPath = DOCKER_SOCK_PATHS.find((p) => exists(p));
+  let dockerSockMode = null;
+  let dockerSockWorld = false;
+  if (sockPath) {
+    try {
+      const parsed = parseStatMode(stat(sockPath).mode);
+      dockerSockMode = parsed.mode;
+      dockerSockWorld = parsed.worldWrite;
+    } catch {
+      /* sock vanished between exists and stat */
+    }
+  }
+  const g = spawn("getent", ["group", "docker"]);
+  const dockerGroup = g.status === 0 ? parseGetentGroupMembers(g.stdout) : [];
+  return { dockerSockMode, dockerSockWorld, dockerGroup };
+}

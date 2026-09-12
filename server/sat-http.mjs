@@ -60,6 +60,9 @@ export function apiFailText(lang, out, t, fallbackKey = "pulse_fail") {
   if (err === "tls") return t(lang, "cabinet_tls", { url });
   if (err === "dns") return t(lang, "cabinet_dns", { url });
   if (err === "bad_secret" || err === "not_found") return t(lang, "key_revoked");
+  if (out?.body?.kind === "satellite" || out?.status === 403 && String(err || "").includes("сателлит")) {
+    return t(lang, "plan_satellite");
+  }
   if (typeof err === "string" && /^[a-z][a-z0-9_]{0,40}$/.test(err)) return err;
   return t(lang, fallbackKey);
 }

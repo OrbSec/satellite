@@ -1,6 +1,6 @@
 {
   "name": "@orb44/cli",
-  "version": "0.1.21",
+  "version": "0.1.23",
   "description": "Orb44 Watch satellite — inside pulse from your VPS (load, listeners, hardening). Pairs with the street snapshot; the dashboard never runs commands on the machine.",
   "type": "module",
   "bin": {

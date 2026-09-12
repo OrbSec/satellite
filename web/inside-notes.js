@@ -84,6 +84,31 @@ export const INSIDE_NOTES = {
       text: "Port 2375 or 2376 accepts connections not only from this machine. The street firewall may still hide it, but the socket is already not loopback.",
       do: "Stop publishing the Docker API. A unix socket is enough. Orb44 does not touch Docker.",
     },
+    "hardening-docker-sock": {
+      title: "docker.sock is world-writable",
+      text: "The socket mode is {mode}. Anyone on this machine can talk to the Docker API — that is root without sudo.",
+      do: "chmod 660 /var/run/docker.sock and keep it on the docker group. Orb44 does not chmod.",
+    },
+    "hardening-docker-group": {
+      title: "Extra accounts in the docker group",
+      text: "Besides root/orb44: {who}. docker group is root-equivalent. We only list names, we do not usermod.",
+      do: "Remove people who do not need Docker. Orb44 does not change groups.",
+    },
+    "hardening-docker-priv": {
+      title: "A privileged container is running",
+      text: "{names}: --privileged. If that container is taken, the host is next.",
+      do: "Drop Privileged in compose. Orb44 does not rewrite compose.",
+    },
+    "hardening-docker-mount": {
+      title: "A container mounted the host root",
+      text: "{names}: -v /:/…. Same class as privileged — the container can rewrite the host.",
+      do: "Mount only the paths the app needs. Orb44 does not unmount volumes.",
+    },
+    "hardening-image-cve": {
+      title: "A running image tag matches a known CVE",
+      text: "{names} — {cve}. Tag only, no pull and no layer scan. Pin a patched tag.",
+      do: "Bump the image tag in compose and recreate. Orb44 does not pull or rewrite compose.",
+    },
     "hardening-reboot": {
       title: "Kernel is waiting for a reboot",
       text: "/var/run/reboot-required is on disk — kernel packages landed, the machine is still on the old one.",
@@ -317,6 +342,31 @@ export const INSIDE_NOTES = {
       title: "Docker API слушает сеть сервера",
       text: "Порт 2375 или 2376 принимает подключения не только с этой машины. С улицы его может закрывать файрвол, но сокет уже не loopback.",
       do: "Уберите публикацию Docker API наружу. Достаточно unix-сокета. Orb44 Docker сам не трогает.",
+    },
+    "hardening-docker-sock": {
+      title: "docker.sock открыт всем на запись",
+      text: "Права сокета {mode}. Любой процесс на машине говорит Docker API — это root без sudo.",
+      do: "chmod 660 /var/run/docker.sock и группа docker. Orb44 права сам не меняет.",
+    },
+    "hardening-docker-group": {
+      title: "В группе docker лишние учётки",
+      text: "Кроме root/orb44: {who}. Группа docker = root. Только имена, usermod не делаем.",
+      do: "Уберите тех, кому Docker не нужен. Orb44 группы сам не правит.",
+    },
+    "hardening-docker-priv": {
+      title: "Крутится privileged-контейнер",
+      text: "{names}: --privileged. Если контейнер возьмут — следующий шаг хост.",
+      do: "Снимите Privileged в compose. Orb44 compose не переписывает.",
+    },
+    "hardening-docker-mount": {
+      title: "Контейнер смонтировал корень хоста",
+      text: "{names}: -v /:/…. Тот же класс, что privileged — контейнер может переписать хост.",
+      do: "Монтируйте только нужные пути. Orb44 тома сам не отключает.",
+    },
+    "hardening-image-cve": {
+      title: "Тег запущенного образа совпадает с известной CVE",
+      text: "{names} — {cve}. Только тег, без pull и без скана слоёв. Закрепите пропатченный тег.",
+      do: "Поднимите тег в compose и пересоздайте контейнер. Orb44 образы сам не тянет и compose не правит.",
     },
     "hardening-reboot": {
       title: "Ядро ждет перезагрузки",
@@ -552,6 +602,31 @@ export const INSIDE_NOTES = {
       text: "El puerto 2375 o 2376 acepta conexiones no solo de esta máquina. El firewall de la calle puede ocultarlo, pero el socket ya no es loopback.",
       do: "Deje de publicar la API de Docker. Basta un socket unix. Orb44 no toca Docker.",
     },
+    "hardening-docker-sock": {
+      title: "docker.sock es escribible por todos",
+      text: "El modo del socket es {mode}. Cualquiera en esta máquina habla con la API de Docker — eso es root sin sudo.",
+      do: "chmod 660 /var/run/docker.sock y déjelo en el grupo docker. Orb44 no cambia permisos.",
+    },
+    "hardening-docker-group": {
+      title: "Cuentas de más en el grupo docker",
+      text: "Además de root/orb44: {who}. El grupo docker equivale a root. Solo listamos nombres, no hacemos usermod.",
+      do: "Quite a quien no necesite Docker. Orb44 no cambia grupos.",
+    },
+    "hardening-docker-priv": {
+      title: "Hay un contenedor privileged",
+      text: "{names}: --privileged. Si toman ese contenedor, el host es el siguiente.",
+      do: "Quite Privileged en compose. Orb44 no reescribe compose.",
+    },
+    "hardening-docker-mount": {
+      title: "Un contenedor montó la raíz del host",
+      text: "{names}: -v /:/…. Misma clase que privileged — el contenedor puede reescribir el host.",
+      do: "Monte solo las rutas que la app necesita. Orb44 no desmonta volúmenes.",
+    },
+    "hardening-image-cve": {
+      title: "El tag de una imagen en marcha coincide con un CVE conocido",
+      text: "{names} — {cve}. Solo el tag, sin pull ni escaneo de capas. Fije un tag parcheado.",
+      do: "Suba el tag en compose y recree el contenedor. Orb44 no descarga imágenes ni reescribe compose.",
+    },
     "hardening-reboot": {
       title: "El kernel espera un reinicio",
       text: "En disco está /var/run/reboot-required — llegaron paquetes del kernel y la máquina sigue en el viejo.",
@@ -785,6 +860,31 @@ export const INSIDE_NOTES = {
       title: "Docker API가 서버 네트워크를 수신",
       text: "포트 2375 또는 2376이 이 머신만이 아니라 연결을 받습니다. 밖 방화벽이 가릴 수는 있어도 소켓은 이미 루프백이 아닙니다.",
       do: "Docker API 공개를 끄세요. unix 소켓이면 됩니다. Orb44는 Docker를 건드리지 않습니다.",
+    },
+    "hardening-docker-sock": {
+      title: "docker.sock이 모두에게 쓰기 가능",
+      text: "소켓 모드 {mode}. 이 머신 누구나 Docker API에 말합니다 — sudo 없는 root입니다.",
+      do: "chmod 660 /var/run/docker.sock, 그룹은 docker. Orb44는 권한을 바꾸지 않습니다.",
+    },
+    "hardening-docker-group": {
+      title: "docker 그룹에 여분 계정",
+      text: "root/orb44 말고: {who}. docker 그룹은 root와 같습니다. 이름만 나열하고 usermod는 하지 않습니다.",
+      do: "Docker가 필요 없는 계정을 빼세요. Orb44는 그룹을 고치지 않습니다.",
+    },
+    "hardening-docker-priv": {
+      title: "privileged 컨테이너가 돌아감",
+      text: "{names}: --privileged. 그 컨테이너를 빼앗기면 다음은 호스트입니다.",
+      do: "compose에서 Privileged를 끄세요. Orb44는 compose를 다시 쓰지 않습니다.",
+    },
+    "hardening-docker-mount": {
+      title: "컨테이너가 호스트 루트를 마운트함",
+      text: "{names}: -v /:/…. privileged와 같은 급 — 컨테이너가 호스트를 덮어쓸 수 있습니다.",
+      do: "앱이 필요한 경로만 마운트하세요. Orb44는 볼륨을 내리지 않습니다.",
+    },
+    "hardening-image-cve": {
+      title: "실행 중 이미지 태그가 알려진 CVE와 맞음",
+      text: "{names} — {cve}. 태그만, pull 없고 레이어 스캔 없음. 패치된 태그를 고정하세요.",
+      do: "compose에서 태그를 올리고 컨테이너를 다시 만드세요. Orb44는 이미지를 받지 않고 compose를 고치지 않습니다.",
     },
     "hardening-reboot": {
       title: "커널이 재부팅을 기다림",
