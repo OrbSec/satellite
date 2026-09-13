@@ -44,7 +44,7 @@ We aim to acknowledge within **3 business days** and to ship a fix or mitigation
 Prefer installing from npm with a **pinned version**:
 
 ```bash
-npx @orb44/cli@0.1.12 --help
+npx @orb44/cli@0.1.24 --help
 ```
 
 GitHub Release assets (when published from this repository) should carry **Cosign** signatures produced by GitHub Actions OIDC (keyless). Example verification once a release exists:
@@ -62,7 +62,7 @@ cosign verify-blob \
 ## Supply chain
 
 - Runtime: **no npm dependencies** by design (`package.json` must stay dependency-free).  
-- Updates: `orb44 update` pulls a versioned tarball for `@orb44/cli`; avoid unpinned `npx @orb44/cli` without a version.  
+- Updates: `orb44 update` pulls a versioned tarball for `@orb44/cli` and checks `dist.integrity` / `dist.shasum` before unpack; avoid unpinned `npx @orb44/cli` without a version.  
 - Device key compromise: revoke the satellite in the dashboard and run `orb44 logout` on the host.
 
 ## Safe harbor
