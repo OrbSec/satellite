@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 
 export const CLI_PACKAGE = "@orb44/cli";
@@ -150,14 +151,39 @@ export function applyUpdateTree(srcPackageDir, destRoot) {
   return dest;
 }
 
+const HASH_ALGS = { sha512: "sha512", sha384: "sha384", sha256: "sha256", sha1: "sha1" };
+
 export async function fetchLatestMeta(fetchFn = fetch) {
   const r = await fetchFn(REGISTRY_LATEST, { headers: { Accept: "application/json" } });
   if (!r?.ok) throw new Error(`registry ${r?.status || "fail"}`);
   const j = await r.json();
   const version = j?.version;
   const tarball = j?.dist?.tarball;
+  const integrity = j?.dist?.integrity ? String(j.dist.integrity) : null;
+  const shasum = j?.dist?.shasum ? String(j.dist.shasum) : null;
   if (!version || !tarball) throw new Error("registry meta");
-  return { version: String(version), tarball: canonicalTarballUrl(tarball) };
+  if (!integrity && !shasum) throw new Error("registry meta: missing integrity");
+  return { version: String(version), tarball: canonicalTarballUrl(tarball), integrity, shasum };
+}
+
+/** Bytes of the tarball must match npm packument dist.integrity / dist.shasum. */
+export function verifyTarballIntegrity(buf, { integrity, shasum } = {}) {
+  const sri = String(integrity || "");
+  const dash = sri.indexOf("-");
+  if (dash > 0) {
+    const alg = HASH_ALGS[sri.slice(0, dash)];
+    const expected = sri.slice(dash + 1);
+    if (!alg || !expected) throw new Error("tarball integrity missing");
+    const actual = crypto.createHash(alg).update(buf).digest("base64");
+    if (actual !== expected) throw new Error("tarball integrity mismatch");
+    return true;
+  }
+  if (shasum) {
+    const actual = crypto.createHash("sha1").update(buf).digest("hex");
+    if (actual !== String(shasum).toLowerCase()) throw new Error("tarball integrity mismatch");
+    return true;
+  }
+  throw new Error("tarball integrity missing");
 }
 
 /** npm metadata uses /@scope/name/; GET of the tarball is more reliable as /@scope%2fname/. */
@@ -171,7 +197,12 @@ export function canonicalTarballUrl(url) {
   }
 }
 
-export async function unpackTarball(url, tmp, fetchFn = fetch, { retries = 4, delayMs = 1500 } = {}) {
+export async function unpackTarball(
+  url,
+  tmp,
+  fetchFn = fetch,
+  { retries = 4, delayMs = 1500, integrity, shasum } = {}
+) {
   const href = canonicalTarballUrl(url);
   let last = "fail";
   let buf = null;
@@ -186,6 +217,7 @@ export async function unpackTarball(url, tmp, fetchFn = fetch, { retries = 4, de
     if (i < retries - 1 && delayMs) await new Promise((ok) => setTimeout(ok, delayMs * (i + 1)));
   }
   if (!buf) throw new Error(`tarball ${last}`);
+  verifyTarballIntegrity(buf, { integrity, shasum });
   const tgz = path.join(tmp, "pkg.tgz");
   fs.writeFileSync(tgz, buf);
   const unpack = path.join(tmp, "unpack");
