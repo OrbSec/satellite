@@ -151,31 +151,37 @@ export function applyUpdateTree(srcPackageDir, destRoot) {
   return dest;
 }
 
+const HASH_ALGS = { sha512: "sha512", sha384: "sha384", sha256: "sha256", sha1: "sha1" };
+
 export async function fetchLatestMeta(fetchFn = fetch) {
   const r = await fetchFn(REGISTRY_LATEST, { headers: { Accept: "application/json" } });
   if (!r?.ok) throw new Error(`registry ${r?.status || "fail"}`);
   const j = await r.json();
   const version = j?.version;
   const tarball = j?.dist?.tarball;
-  const integrity = j?.dist?.integrity || null;
-  const shasum = j?.dist?.shasum || null;
+  const integrity = j?.dist?.integrity ? String(j.dist.integrity) : null;
+  const shasum = j?.dist?.shasum ? String(j.dist.shasum) : null;
   if (!version || !tarball) throw new Error("registry meta");
   if (!integrity && !shasum) throw new Error("registry meta: missing integrity");
   return { version: String(version), tarball: canonicalTarballUrl(tarball), integrity, shasum };
 }
 
-/** Verify a downloaded tarball against the registry-provided integrity/shasum before it is trusted. */
+/** Bytes of the tarball must match npm packument dist.integrity / dist.shasum. */
 export function verifyTarballIntegrity(buf, { integrity, shasum } = {}) {
-  if (integrity) {
-    const [alg, expected] = String(integrity).split("-");
+  const sri = String(integrity || "");
+  const dash = sri.indexOf("-");
+  if (dash > 0) {
+    const alg = HASH_ALGS[sri.slice(0, dash)];
+    const expected = sri.slice(dash + 1);
+    if (!alg || !expected) throw new Error("tarball integrity missing");
     const actual = crypto.createHash(alg).update(buf).digest("base64");
     if (actual !== expected) throw new Error("tarball integrity mismatch");
-    return;
+    return true;
   }
   if (shasum) {
     const actual = crypto.createHash("sha1").update(buf).digest("hex");
-    if (actual !== shasum) throw new Error("tarball integrity mismatch");
-    return;
+    if (actual !== String(shasum).toLowerCase()) throw new Error("tarball integrity mismatch");
+    return true;
   }
   throw new Error("tarball integrity missing");
 }

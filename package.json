@@ -44,6 +44,7 @@
     "access": "public"
   },
   "scripts": {
-    "prepack": "node ./prepack.mjs"
+    "prepack": "node ./prepack.mjs",
+    "test": "node --test"
   }
 }
