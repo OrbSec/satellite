@@ -9,7 +9,7 @@ import { collectPulse, formatPulsePreview } from "../server/pulse.mjs";
 import { LANGS, LANG_LABEL, detectLang, normalizeLang, t } from "../server/sat-i18n.mjs";
 import { localizeInsideNote } from "../web/inside-notes.js";
 import { pickFromList } from "../server/cli-menu.mjs";
-import { SYSTEM_DEVICE, parseDeviceJson, hasExistingInstall, pickLiveDevice, deviceSearchPaths, loadFirstDevice, stripDevicePath } from "../server/sat-local.mjs";
+import { SYSTEM_DEVICE, SYSTEM_LIB, parseDeviceJson, hasExistingInstall, pickLiveDevice, deviceSearchPaths, loadFirstDevice, stripDevicePath, cliLinkPath, satLibRoot, writeCliShim, pathHasDir } from "../server/sat-local.mjs";
 import { CLI_PACKAGE, cmpVer, readCliVersion, pickSatRoots, staleSatRoots, applyUpdateTree, fetchLatestMeta, resolveUpdateSource, unpackTarball } from "../server/sat-update.mjs";
 import { cabinetRequest, apiFailText } from "../server/sat-http.mjs";
 import {
@@ -557,15 +557,7 @@ function systemdUnit({ node, script, deviceFile, interval, user, groups = [] }) 
   return `${lines.join("\n")}\n`;
 }
 
-const CLI_LINK = "/usr/local/bin/orb44";
-
-function linkSystemCli(node, script) {
-  const body = `#!/bin/sh\nexec ${quote(node)} ${quote(script)} "$@"\n`;
-  fs.writeFileSync(CLI_LINK, body, { mode: 0o755 });
-}
-
-function installSystemTree() {
-  const lib = "/usr/lib/orb44-sat";
+function installTree(lib) {
   const srcRoot = path.join(path.dirname(SCRIPT), "..");
   fs.mkdirSync(path.join(lib, "bin"), { recursive: true, mode: 0o755 });
   fs.mkdirSync(path.join(lib, "server"), { recursive: true, mode: 0o755 });
@@ -579,6 +571,18 @@ function installSystemTree() {
     );
   }
   return path.join(lib, "bin", "orb44.mjs");
+}
+
+function installSystemTree() {
+  return installTree(SYSTEM_LIB);
+}
+
+function placeCliOnPath() {
+  const lib = satLibRoot();
+  const dest = cliLinkPath();
+  const script = installTree(lib);
+  writeCliShim(dest, { node: process.execPath, script });
+  return { path: dest, script, lib };
 }
 
 function nologinShell() {
@@ -687,10 +691,19 @@ function printAccessNotes(notes) {
 async function cmdInstall(opts, { enable = false, skipAsk = false } = {}) {
   applyLang(opts);
   if (!skipAsk) await printVersionPair();
+  let placed = null;
+  try {
+    placed = placeCliOnPath();
+    console.log("✅  " + t(lang, "cli_link", { path: placed.path }));
+    const dir = path.dirname(placed.path);
+    if (!pathHasDir(dir)) console.log(dim(t(lang, "cli_path_hint", { dir })));
+  } catch (e) {
+    console.error("⚠️  " + t(lang, "cli_link_fail", { err: e.message ? `: ${String(e.message).slice(0, 160)}` : "" }));
+  }
   const rec = loadDeviceRecord();
   if (!rec?.secret) {
-    console.error("⚠️  " + t(lang, "need_login"));
-    process.exit(1);
+    console.log("⚠️  " + t(lang, "need_login"));
+    process.exit(placed ? 0 : 1);
   }
   const srcPath = rec.path || DEVICE_FILE;
   const device = stripDevicePath(rec);
@@ -766,8 +779,7 @@ async function cmdInstall(opts, { enable = false, skipAsk = false } = {}) {
   console.log("⚙️  " + t(lang, "unit_written", { path: unitPath }));
   if (asSystem) {
     try {
-      linkSystemCli(process.execPath, script);
-      console.log(dim(t(lang, "cli_link", { path: CLI_LINK })));
+      writeCliShim(cliLinkPath(), { node: process.execPath, script });
     } catch {
       /* /usr/local/bin missing */
     }

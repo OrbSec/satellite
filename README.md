@@ -11,35 +11,37 @@
 | Security | [SECURITY.md](https://github.com/OrbSec/satellite/blob/main/SECURITY.md) · Cosign-signed GitHub Releases |
 | License | MIT |
 
-Node **18+**. Linux or macOS. Current release: **0.1.28**.
+Node **18+**. Linux or macOS. Current release: **0.1.29**.
 
 ## Install
 
 npm’s sidebar `npm i @orb44/cli` is the library install. **Do not use it.** This package is a CLI: run it with a **pinned** `npx`, then optionally copy the binary onto the box.
 
 1. `node -v` must be **v18 or newer**. Ubuntu/Debian `apt install nodejs` is often Node 12 — remove it and install current Node (NodeSource 22 LTS, or [nodejs.org](https://nodejs.org)).
-2. Pair (or live `top`) — no `npm install`:
+2. Put `orb44` on PATH (no dashboard pair yet). Root writes `/usr/local/bin/orb44`; otherwise `~/.local/bin/orb44`.
 
 ```bash
-npx @orb44/cli@0.1.28 login --url https://app.orb44.com
+npx @orb44/cli@0.1.29 install
+hash -r
+orb44 top
 ```
 
-3. Permanent `orb44` on PATH + optional systemd unit:
+3. Pair with the dashboard:
 
 ```bash
-npx @orb44/cli@0.1.28 install
+orb44 login --url https://app.orb44.com
 ```
 
-After that: `orb44 status`, `orb44 update`, `orb44 rotate`. Do not run bare `npx @orb44/cli` (stale cache). Do not `npm i -g @orb44/cli` without a version pin.
+Do not run bare `npx @orb44/cli` (stale cache). Do not `npm i -g @orb44/cli` without a version pin.
 
 ## Live view (no login)
 
 Perimeter snapshot on this box — load, RAM, disk, listeners with access labels, process top. **Live only**: no history, no Watch alerts, no street delta (those are on the paid plan).
 
 ```bash
-npx @orb44/cli@0.1.28 top
-npx @orb44/cli@0.1.28 top --interval 1
-npx @orb44/cli@0.1.28 top --once    # one frame, then exit
+npx @orb44/cli@0.1.29 top
+npx @orb44/cli@0.1.29 top --interval 1
+npx @orb44/cli@0.1.29 top --once    # one frame, then exit
 ```
 
 Keys: `q` quit · `Ctrl+C`.
@@ -47,7 +49,7 @@ Keys: `q` quit · `Ctrl+C`.
 ## Pair with the dashboard
 
 ```bash
-npx @orb44/cli@0.1.28 login --url https://app.orb44.com
+npx @orb44/cli@0.1.29 login --url https://app.orb44.com
 ```
 
 Open the printed link while signed into the dashboard, confirm the domain, then optionally install the systemd daemon (default: no on `login`).
@@ -55,11 +57,11 @@ Open the printed link while signed into the dashboard, confirm the domain, then 
 `install` on a TTY asks: Watch daemon (default yes), error-log tail (default no), then optional read access for fail2ban / Docker / journal. **`--docker` is root on the host** (docker group). `--daemon` `--logs` `--fail2ban` `--docker` `--journal` `--access` skip those questions.
 
 ```bash
-npx @orb44/cli@0.1.28 status
-npx @orb44/cli@0.1.28 pulse
-npx @orb44/cli@0.1.28 install
+npx @orb44/cli@0.1.29 status
+npx @orb44/cli@0.1.29 pulse
+npx @orb44/cli@0.1.29 install
 orb44 update
-npx @orb44/cli@0.1.28 logout
+npx @orb44/cli@0.1.29 logout
 ```
 
 Do **not** run bare `npx @orb44/cli` — caches go stale. Pin the version or use `orb44` after install.
