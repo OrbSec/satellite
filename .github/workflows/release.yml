@@ -26,6 +26,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          registry-url: https://registry.npmjs.org
+          scope: "@orb44"
+
+      - name: npm 11 for OIDC publish
+        run: npm install -g npm@11.15.0
 
       - name: Pack
         id: pack
@@ -87,3 +92,9 @@ jobs:
               --title "$TAG" \
               --notes "$NOTES"
           fi
+
+      - name: Publish to npm
+        run: |
+          set -euo pipefail
+          TGZ="${{ steps.pack.outputs.tgz }}"
+          npm publish "$TGZ" --access public --ignore-scripts --provenance
