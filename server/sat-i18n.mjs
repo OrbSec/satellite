@@ -175,7 +175,7 @@ const STR = {
     top_acc_local: "local only",
     top_miner_tag: "miner?",
     top_hot_tag: "hot",
-    top_footer: "Live only · no history · Watch & street delta → app.orb44.com",
+    top_footer: "Live session graphs · nothing saved · Watch & street → app.orb44.com",
     top_keys: "q quit · Ctrl+C",
     help: `Orb44 satellite {version} — admin device.
 
@@ -192,7 +192,7 @@ const STR = {
   orb44 rotate
   orb44 logout
 
-top: live perimeter view on this box (no login). History, alerts, street delta — paid plan.
+top: live perimeter (no login). Session graphs in RAM only. History/alerts/street — paid plan.
 Login asks language (saved), then daemon and logs (default no).
 Install asks daemon (default yes), logs (default no), then access for fail2ban / Docker / journal when present.
 Docker group = root on the host. --npm skips the GitHub checksum (weaker).
@@ -350,7 +350,7 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     top_acc_local: "только машина",
     top_miner_tag: "майнер?",
     top_hot_tag: "горячий",
-    top_footer: "Только live · без истории · Watch и дельта с улицы → app.orb44.com",
+    top_footer: "Графики только в этой сессии · ничего не пишем · Watch и улица → app.orb44.com",
     top_keys: "q выход · Ctrl+C",
     help: `Orb44 сателлит {version} — устройство админа.
 
@@ -523,7 +523,7 @@ install: демон (да), логи (нет), затем доступ к fail2b
     top_acc_local: "로컬만",
     top_miner_tag: "채굴?",
     top_hot_tag: "과열",
-    top_footer: "Live만 · 기록 없음 · Watch·거리 델타 → app.orb44.com",
+    top_footer: "세션 그래프만 · 저장 없음 · Watch·거리 → app.orb44.com",
     top_keys: "q 종료 · Ctrl+C",
     help: `Orb44 위성 {version} — 관리자 장치.
 
@@ -702,7 +702,7 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     top_acc_local: "solo local",
     top_miner_tag: "¿minero?",
     top_hot_tag: "caliente",
-    top_footer: "Solo live · sin historial · Watch y delta de calle → app.orb44.com",
+    top_footer: "Gráficos de esta sesión · no se guarda · Watch y calle → app.orb44.com",
     top_keys: "q salir · Ctrl+C",
     help: `Satélite Orb44 {version} — dispositivo de admin.
 
@@ -719,7 +719,7 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
   orb44 rotate
   orb44 logout
 
-top: vista live en esta máquina (sin login). Historial, alertas, delta de calle — paid plan.
+top: vista live (sin login). Gráficos de sesión en RAM. Historial/alertas/calle — paid plan.
 Login pregunta idioma (lo guarda), luego demonio y logs (por defecto no).
 install: demonio (sí), logs (no), luego acceso fail2ban / Docker / journal si están.
 Grupo docker = root en el host. --npm omite el checksum de GitHub (más débil).
