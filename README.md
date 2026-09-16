@@ -11,16 +11,16 @@
 | Security | [SECURITY.md](https://github.com/OrbSec/satellite/blob/main/SECURITY.md) · Cosign-signed GitHub Releases |
 | License | MIT |
 
-Node 18+. Linux or macOS. Current release: **0.1.24**.
+Node 18+. Linux or macOS. Current release: **0.1.26**.
 
 ## Live view (no login)
 
 Perimeter snapshot on this box — load, RAM, disk, listeners with access labels, process top. **Live only**: no history, no Watch alerts, no street delta (those are on the paid plan).
 
 ```bash
-npx @orb44/cli@0.1.24 top
-npx @orb44/cli@0.1.24 top --interval 1
-npx @orb44/cli@0.1.24 top --once    # one frame, then exit
+npx @orb44/cli@0.1.26 top
+npx @orb44/cli@0.1.26 top --interval 1
+npx @orb44/cli@0.1.26 top --once    # one frame, then exit
 ```
 
 Keys: `q` quit · `Ctrl+C`.
@@ -28,44 +28,45 @@ Keys: `q` quit · `Ctrl+C`.
 ## Pair with the dashboard
 
 ```bash
-npx @orb44/cli@0.1.24 login --url https://app.orb44.com
+npx @orb44/cli@0.1.26 login --url https://app.orb44.com
 ```
 
 Open the printed link while signed into the dashboard, confirm the domain, then optionally install the systemd daemon (default: no on `login`).
 
-`install` on a TTY asks: Watch daemon (default yes), error-log tail (default no), then optional read access for fail2ban / Docker / journal. `--daemon` `--logs` `--fail2ban` `--docker` `--journal` `--access` skip those questions.
+`install` on a TTY asks: Watch daemon (default yes), error-log tail (default no), then optional read access for fail2ban / Docker / journal. **`--docker` is root on the host** (docker group). `--daemon` `--logs` `--fail2ban` `--docker` `--journal` `--access` skip those questions.
 
 ```bash
-npx @orb44/cli@0.1.24 status
-npx @orb44/cli@0.1.24 pulse
-npx @orb44/cli@0.1.24 install
+npx @orb44/cli@0.1.26 status
+npx @orb44/cli@0.1.26 pulse
+npx @orb44/cli@0.1.26 install
 orb44 update
-npx @orb44/cli@0.1.24 logout
+npx @orb44/cli@0.1.26 logout
 ```
 
 Do **not** run bare `npx @orb44/cli` — caches go stale. Pin the version or use `orb44` after install.
 
-`orb44 update` downloads the latest `@orb44/cli` tarball from npm and checks it against `dist.integrity` / `dist.shasum` (allowlisted SHA) **before** unpack.
+`orb44 update` installs the **GitHub release** (`OrbSec/satellite`) whose `SHA256SUMS` matches the tarball bytes. npm `dist.integrity` is not a signature — `update --npm` is an emergency bypass. Cosign on the GitHub release is extra, for humans/`cosign verify-blob`; the CLI always requires the checksum file.
 
-Device key: `~/.config/orb44/device.json` (mode `0600`). Not a shell token.
+Device key: `~/.config/orb44/device.json` (mode `0600`). Not a shell token. Rotate in place: `orb44 rotate`.
 
 ## Commands
 
 ```
-orb44 login [--url …] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
+orb44 login [--url …] [--daemon] [--logs] [--force] [--lang en|es]
 orb44 top [--interval 2] [--once]
 orb44 pulse
 orb44 daemon [--interval 300]
 orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access]
 orb44 uninstall [--purge]
-orb44 lang [en|ru|ko|es]
+orb44 lang [en|es]
 orb44 status
 orb44 version
-orb44 update
+orb44 update [--force] [--npm]
+orb44 rotate
 orb44 logout
 ```
 
-Language: `--lang`, `ORB44_LANG`, or a prompt on first login (`en` `ru` `ko` `es`).
+Language: `--lang`, `ORB44_LANG`, or a prompt on first login (`en` `es`). Default is English.
 
 ## What a pulse includes
 

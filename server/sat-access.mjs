@@ -43,7 +43,40 @@ export function normalizeAccess(raw = {}) {
   };
 }
 
-/** Groups to put on the systemd unit (only those that exist). */
+/** systemd sandbox for the pulse daemon. Skip ProtectHome=true on user units (key in ~/.config). */
+export function satelliteServiceHardening({ systemUser = false } = {}) {
+  const lines = [
+    "NoNewPrivileges=true",
+    "RestrictSUIDSGID=true",
+    "LockPersonality=true",
+    "RestrictRealtime=true",
+    "ProtectClock=true",
+    "ProtectHostname=true",
+    "ProtectKernelTunables=true",
+    "ProtectKernelModules=true",
+    "ProtectKernelLogs=true",
+    "ProtectControlGroups=true",
+    "RestrictNamespaces=true",
+    "SystemCallArchitectures=native",
+    "RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6",
+    "PrivateTmp=true",
+    "PrivateDevices=true",
+    "CapabilityBoundingSet=",
+    "UMask=0077",
+  ];
+  if (systemUser) {
+    lines.push(
+      "ProtectSystem=strict",
+      "ProtectHome=true",
+      "ReadWritePaths=/var/lib/orb44",
+      "ReadOnlyPaths=/usr/lib/orb44-sat"
+    );
+  } else {
+    lines.push("ProtectSystem=full", "ProtectHome=read-only", "ReadWritePaths=%h/.config/orb44");
+  }
+  return lines;
+}
+
 export function supplementaryGroups(access, { spawn = run } = {}) {
   const a = normalizeAccess(access);
   const want = [];

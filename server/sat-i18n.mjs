@@ -1,14 +1,14 @@
-export const LANGS = ["en", "ru", "ko", "es"];
-export const LANG_LABEL = { en: "English", ru: "Русский", ko: "한국어", es: "Español" };
+export const LANGS = ["en", "es"];
+export const LANG_LABEL = { en: "English", es: "Español" };
 
 export function normalizeLang(raw) {
   const s = String(raw || "")
     .trim()
     .toLowerCase()
     .replace(/_/g, "-");
-  if (s === "kr" || s.startsWith("ko")) return "ko";
+  if (s === "kr" || s.startsWith("ko")) return "en";
   if (s === "espanol" || s === "español" || s.startsWith("es")) return "es";
-  if (s === "russian" || s.startsWith("ru")) return "ru";
+  if (s === "russian" || s.startsWith("ru")) return "en";
   if (s.startsWith("en")) return "en";
   if (LANGS.includes(s)) return s;
   return null;
@@ -22,9 +22,9 @@ const STR = {
   en: {
     banner_title: "Orb44 satellite",
     banner_sub: "Inside analysis of this host: load, listeners, hardening.",
-    lang_pick: "Language  ·  Язык  ·  언어  ·  Idioma",
+    lang_pick: "Language  ·  Idioma",
     lang_saved: "Language saved: {label}",
-    lang_now: "CLI language: {label}  (--lang en|ru|ko|es)",
+    lang_now: "CLI language: {label}  (--lang en|es)",
     open_link: "Open this link in the browser where Orb44 is already signed in:",
     code: "code {code}",
     waiting: "Waiting for dashboard confirmation…",
@@ -45,14 +45,14 @@ const STR = {
     daemon_no: "No",
     daemon_yes: "Yes — background, starts after reboot",
     daemon_skip: "Daemon not installed. Later: orb44 install   or login --daemon",
-    ask_logs: "Collect last errors from journal, Docker, Kubernetes, nginx?\nLast lines only, secrets stripped. Needs read access — Orb44 will not sudo.",
+    ask_logs: "Collect last errors from journal, Docker, Kubernetes, nginx?\nLast lines only. Keyword redaction misses tokens in unusual formats (bots, n8n). Needs read access — Orb44 will not sudo.",
     logs_no: "No — processes and listeners only",
     logs_yes: "Yes — last errors if readable",
     logs_skip: "Log monitoring off. Later: orb44 login --logs   or orb44 install --logs",
     logs_on: "Log monitoring on. Docker/kube/nginx only if this user can read them.",
     ask_access_fail2ban: "Allow reading fail2ban counters?\nAdds a read ACL on the fail2ban socket for user orb44 (no sudo at runtime). If setfacl is missing, installs package acl.",
-    ask_access_docker: "Allow Docker visibility (docker ps / logs)?\nAdds orb44 to the docker group. Same rights as any docker-group user on this host.",
-    ask_access_journal: "Allow reading journal and web error logs?\nAdds orb44 to systemd-journal / adm and ACL on nginx/apache log dirs if present. May install package acl for setfacl.",
+    ask_access_docker: "Allow Docker visibility (docker ps / logs)?\nAdds orb44 to the docker group — that is root on this host without sudo. Do not enable on shared boxes or hosts running n8n/bots.",
+    ask_access_journal: "Allow reading journal and web error logs?\nAdds orb44 to systemd-journal / adm. Keyword redaction is not a secret vault. May install package acl for setfacl.",
     access_yes: "Yes — set access now",
     access_no: "No — leave as is",
     access_applying: "Setting read access for service user…",
@@ -121,6 +121,12 @@ const STR = {
     update_fail: "Update failed{err}",
     update_npx: "Do not run bare npx @orb44/cli — pin: npx @orb44/cli@{version}",
     update_restarted: "Restarted orb44-satellite.",
+    update_via: "Trust: {source}",
+    update_unsigned: "No GitHub SHA256SUMS for this update{err}",
+    update_npm_hint: "Emergency (npm account is then the trust root): orb44 update --npm",
+    update_npm_weak: "npm dist.integrity is not a signature. Prefer a GitHub release checksum from OrbSec/satellite.",
+    rotate_ok: "Device key rotated. The old secret no longer works.",
+    rotate_fail: "Could not rotate the device key",
     advice_title: "What to do on this machine",
     advice_sub: "The dashboard will not run this — a leaked key must not become a remote shell.",
     preview_host: "host {h}",
@@ -171,21 +177,23 @@ const STR = {
     top_keys: "q quit · Ctrl+C",
     help: `Orb44 satellite {version} — admin device.
 
-  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
-  orb44 top [--interval 2] [--once] [--lang en|ru|ko|es]
+  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|es]
+  orb44 top [--interval 2] [--once] [--lang en|es]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
-  orb44 lang [en|ru|ko|es]
+  orb44 lang [en|es]
   orb44 status
   orb44 version
-  orb44 update
+  orb44 update [--force] [--npm]
+  orb44 rotate
   orb44 logout
 
 top: live perimeter view on this box (no login). History, alerts, street delta — paid plan.
 Login asks language (saved), then daemon and logs (default no).
 Install asks daemon (default yes), logs (default no), then access for fail2ban / Docker / journal when present.
+Docker group = root on the host. --npm skips the GitHub checksum (weaker).
 --daemon / --logs / --fail2ban / --docker / --journal / --access skip those questions.
 Key: {file}
 Outgoing pulse. The dashboard does not execute commands; it replies with advice.`,
@@ -195,7 +203,7 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     banner_sub: "Анализ хоста изнутри: нагрузка, слушатели, hardening.",
     lang_pick: "Language  ·  Язык  ·  언어  ·  Idioma",
     lang_saved: "Язык сохранён: {label}",
-    lang_now: "Язык консоли: {label}  (--lang en|ru|ko|es)",
+    lang_now: "Язык консоли: {label}  (--lang en|es)",
     open_link: "Открой ссылку в браузере, где уже открыт Orb44:",
     code: "код {code}",
     waiting: "Жду подтверждения в кабинете…",
@@ -342,13 +350,13 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     top_keys: "q выход · Ctrl+C",
     help: `Orb44 сателлит {version} — устройство админа.
 
-  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
-  orb44 top [--interval 2] [--once] [--lang en|ru|ko|es]
+  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|es]
+  orb44 top [--interval 2] [--once] [--lang en|es]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
-  orb44 lang [en|ru|ko|es]
+  orb44 lang [en|es]
   orb44 status
   orb44 version
   orb44 update
@@ -366,7 +374,7 @@ install: демон (да), логи (нет), затем доступ к fail2b
     banner_sub: "이 호스트를 안에서 분석합니다: 부하, 리스너, hardening.",
     lang_pick: "Language  ·  Язык  ·  언어  ·  Idioma",
     lang_saved: "언어 저장됨: {label}",
-    lang_now: "CLI 언어: {label}  (--lang en|ru|ko|es)",
+    lang_now: "CLI 언어: {label}  (--lang en|es)",
     open_link: "이미 Orb44에 로그인한 브라우저에서 이 링크를 여세요:",
     code: "코드 {code}",
     waiting: "대시보드 확인을 기다리는 중…",
@@ -513,13 +521,13 @@ install: демон (да), логи (нет), затем доступ к fail2b
     top_keys: "q 종료 · Ctrl+C",
     help: `Orb44 위성 {version} — 관리자 장치.
 
-  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
-  orb44 top [--interval 2] [--once] [--lang en|ru|ko|es]
+  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|es]
+  orb44 top [--interval 2] [--once] [--lang en|es]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
-  orb44 lang [en|ru|ko|es]
+  orb44 lang [en|es]
   orb44 status
   orb44 version
   orb44 update
@@ -537,7 +545,7 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     banner_sub: "Análisis del host desde dentro: carga, listeners, hardening.",
     lang_pick: "Language  ·  Язык  ·  언어  ·  Idioma",
     lang_saved: "Idioma guardado: {label}",
-    lang_now: "Idioma de la consola: {label}  (--lang en|ru|ko|es)",
+    lang_now: "Idioma de la consola: {label}  (--lang en|es)",
     open_link: "Abra este enlace en el navegador donde ya está Orb44:",
     code: "código {code}",
     waiting: "Esperando confirmación en el panel…",
@@ -558,14 +566,14 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     daemon_no: "No",
     daemon_yes: "Sí — segundo plano y tras el reinicio",
     daemon_skip: "Demonio no instalado. Luego: orb44 install   o login --daemon",
-    ask_logs: "¿Enviar los últimos errores de journal, Docker, Kubernetes, nginx?\nSolo las últimas líneas, sin secretos. Hace falta lectura — Orb44 no usa sudo.",
+    ask_logs: "¿Enviar los últimos errores de journal, Docker, Kubernetes, nginx?\nSolo las últimas líneas. El filtro de secretos por palabras clave falla con formatos raros (bots, n8n). Hace falta lectura — Orb44 no usa sudo.",
     logs_no: "No — solo procesos y listeners",
     logs_yes: "Sí — últimos errores si se pueden leer",
     logs_skip: "Sin logs. Luego: orb44 login --logs   o orb44 install --logs",
     logs_on: "Logs activos. Docker/kube/nginx solo si este usuario los ve.",
     ask_access_fail2ban: "¿Permitir leer contadores de fail2ban?\nACL de lectura en el socket fail2ban para orb44 (sin sudo en runtime). Si falta setfacl, instala el paquete acl.",
-    ask_access_docker: "¿Permitir ver Docker (docker ps / logs)?\nAñade orb44 al grupo docker. Mismos derechos que cualquier miembro en este host.",
-    ask_access_journal: "¿Permitir leer journal y logs de error web?\nGrupos systemd-journal / adm y ACL en dirs nginx/apache si existen. Puede instalar el paquete acl.",
+    ask_access_docker: "¿Permitir ver Docker (docker ps / logs)?\nAñade orb44 al grupo docker: eso es root en este host sin sudo. No lo active en máquinas compartidas ni con n8n/bots.",
+    ask_access_journal: "¿Permitir leer journal y logs de error web?\nGrupos systemd-journal / adm. El filtro de secretos no es una caja fuerte. Puede instalar el paquete acl.",
     access_yes: "Sí — dar acceso ahora",
     access_no: "No — dejar igual",
     access_applying: "Configurando acceso de lectura para el usuario del servicio…",
@@ -634,6 +642,12 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     update_fail: "La actualización falló{err}",
     update_npx: "No use npx @orb44/cli sin versión — fije: npx @orb44/cli@{version}",
     update_restarted: "orb44-satellite reiniciado.",
+    update_via: "Confianza: {source}",
+    update_unsigned: "No hay SHA256SUMS de GitHub para esta actualización{err}",
+    update_npm_hint: "Emergencia (npm pasa a ser la raíz de confianza): orb44 update --npm",
+    update_npm_weak: "dist.integrity de npm no es una firma. Prefiera el checksum de un release en OrbSec/satellite.",
+    rotate_ok: "Clave del dispositivo rotada. El secreto anterior ya no vale.",
+    rotate_fail: "No se pudo rotar la clave",
     advice_title: "Qué hacer en esta máquina",
     advice_sub: "El panel no lo ejecutará: una clave filtrada no debe ser un shell remoto.",
     preview_host: "host {h}",
@@ -684,21 +698,23 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     top_keys: "q salir · Ctrl+C",
     help: `Satélite Orb44 {version} — dispositivo de admin.
 
-  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|ru|ko|es]
-  orb44 top [--interval 2] [--once] [--lang en|ru|ko|es]
+  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|es]
+  orb44 top [--interval 2] [--once] [--lang en|es]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
-  orb44 lang [en|ru|ko|es]
+  orb44 lang [en|es]
   orb44 status
   orb44 version
-  orb44 update
+  orb44 update [--force] [--npm]
+  orb44 rotate
   orb44 logout
 
 top: vista live en esta máquina (sin login). Historial, alertas, delta de calle — paid plan.
 Login pregunta idioma (lo guarda), luego demonio y logs (por defecto no).
 install: demonio (sí), logs (no), luego acceso fail2ban / Docker / journal si están.
+Grupo docker = root en el host. --npm omite el checksum de GitHub (más débil).
 --daemon / --logs / --fail2ban / --docker / --journal / --access saltan las preguntas.
 Clave: {file}
 Pulso saliente. El panel no ejecuta órdenes; responde con consejos.`,
@@ -706,7 +722,7 @@ Pulso saliente. El panel no ejecuta órdenes; responde con consejos.`,
 };
 
 export function t(lang, key, vars = {}) {
-  const table = STR[lang] || STR.en;
+  const table = STR[normalizeLang(lang) || lang] || STR.en;
   let s = table[key] || STR.en[key] || key;
   for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, v == null ? "" : String(v));
   return s;

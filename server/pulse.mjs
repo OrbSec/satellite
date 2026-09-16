@@ -6,6 +6,7 @@ import { t } from "./sat-i18n.mjs";
 import { insideNote } from "../web/inside-notes.js";
 import { collectRuntime, sanitizeErrors, sanitizeGrants, sanitizeRuntime, isSatLogNoise } from "./sat-logs.mjs";
 import { probeDockerSocket, unexpectedDockerGroup } from "./sat-access.mjs";
+import { parseBackupHints } from "./smb-surface.mjs";
 
 const COMM_RE = /[^a-zA-Z0-9._+-]/g;
 
@@ -155,6 +156,7 @@ export function parsePsTop(text) {
     const comm = sanitizeComm(commRaw);
     if (!comm || SKIP_TOP.has(comm)) continue;
     rows.push({
+      pid: Number(m[1]) || 0,
       comm,
       cpuPct: Math.round(Number(m[2]) * 10) / 10,
       rssMb: Math.round(Number(m[3]) / 1024),
@@ -237,11 +239,19 @@ function listenTable() {
   return { listen: [], named: false };
 }
 
-function topTable() {
+function topTable(containers = []) {
   const withStat = run("ps", ["-axo", "pid=,pcpu=,rss=,stat=,comm="]);
-  const parsed = parsePsTop(withStat);
-  if (parsed.length) return parsed;
-  return parsePsTop(run("ps", ["-axo", "pid=,pcpu=,rss=,comm="]));
+  let parsed = parsePsTop(withStat);
+  if (!parsed.length) parsed = parsePsTop(run("ps", ["-axo", "pid=,pcpu=,rss=,comm="]));
+  for (const r of parsed) {
+    if (!r.pid) continue;
+    try {
+      r.cgroupId = parseProcCgroup(fs.readFileSync(`/proc/${r.pid}/cgroup`, "utf8"));
+    } catch {
+      r.cgroupId = null;
+    }
+  }
+  return annotateTopContainers(parsed, containers);
 }
 
 function okListenAddr(a) {
@@ -282,12 +292,21 @@ export function sanitizePulse(raw = {}) {
   const top = Array.isArray(raw.top)
     ? raw.top
         .slice(0, 8)
-        .map((r) => ({
-          comm: sanitizeComm(r.comm),
-          cpuPct: Math.max(0, Math.min(100, Number(r.cpuPct) || 0)),
-          rssMb: Math.max(0, Math.round(Number(r.rssMb) || 0)),
-          stat: STAT_RE.test(String(r.stat || "")) ? String(r.stat).slice(0, 4) : null,
-        }))
+        .map((r) => {
+          const row = {
+            comm: sanitizeComm(r.comm),
+            cpuPct: Math.max(0, Math.min(400, Number(r.cpuPct) || 0)),
+            rssMb: Math.max(0, Math.round(Number(r.rssMb) || 0)),
+            stat: STAT_RE.test(String(r.stat || "")) ? String(r.stat).slice(0, 4) : null,
+            container: sanitizeComm(r.container) || null,
+            image: String(r.image || "")
+              .replace(/@sha256:[0-9a-f]{32,}$/i, "")
+              .slice(0, 80),
+          };
+          if (!row.container) delete row.container;
+          if (!row.image || /^sha256:/i.test(row.image)) delete row.image;
+          return { ...row, miner: looksLikeMiner(row) };
+        })
         .filter((r) => r.comm)
     : [];
   const listen = collapseListen(
@@ -332,6 +351,7 @@ export function sanitizePulse(raw = {}) {
     dockerHostMount: Boolean(raw.hardening?.dockerHostMount),
     dockerEscape: sanitizeDockerEscape(raw.hardening?.dockerEscape),
     imageCves: sanitizeImageCves(raw.hardening?.imageCves),
+    containerMiners: sanitizeContainerMiners(raw.hardening?.containerMiners),
     oomKills: Math.max(0, Math.min(999, Number(raw.hardening?.oomKills) || 0)),
   };
   const limited = Boolean(raw.limited);
@@ -358,8 +378,17 @@ export function sanitizePulse(raw = {}) {
     runtime: sanitizeRuntime(raw.runtime),
     errors: sanitizeErrors(raw.errors),
     apps: sanitizeApps(raw.apps),
+    backups: sanitizeBackups(raw.backups),
   };
   return { ...base, gradeInside: gradeInside(base) };
+}
+
+function sanitizeBackups(raw) {
+  if (!raw || typeof raw !== "object") return { present: false, tools: [], names: [] };
+  const allow = new Set(["restic", "borgmatic", "borg", "rclone", "duplicity", "rsnapshot", "rdiff-backup", "proxmox-backup", "veeam", "acronis", "duplicati"]);
+  const tools = [...new Set((Array.isArray(raw.tools) ? raw.tools : []).map((x) => String(x).toLowerCase()).filter((x) => allow.has(x)))].slice(0, 8);
+  const names = (Array.isArray(raw.names) ? raw.names : []).map((x) => String(x).slice(0, 80)).filter(Boolean).slice(0, 8);
+  return { present: Boolean(raw.present) && tools.length > 0, tools, names };
 }
 
 const JAIL_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,40}$/;
@@ -410,6 +439,26 @@ function sanitizeImageCves(raw) {
     if (!product || !IMAGE_CVE_RE.test(cve)) continue;
     out.push({ name: name.slice(0, 40), image, version, product, cve });
     if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function sanitizeContainerMiners(raw) {
+  const out = [];
+  for (const row of Array.isArray(raw) ? raw : []) {
+    const name = sanitizeComm(row?.name || row?.comm);
+    if (!name) continue;
+    const image = String(row?.image || "")
+      .replace(/@sha256:[0-9a-f]{32,}$/i, "")
+      .slice(0, 80);
+    out.push({
+      name: name.slice(0, 40),
+      comm: (sanitizeComm(row?.comm) || name).slice(0, 40),
+      cpuPct: Math.max(0, Math.min(400, Number(row?.cpuPct) || 0)),
+      rssMb: Math.max(0, Math.min(1024 * 1024, Math.round(Number(row?.rssMb) || 0))),
+      image: IMAGE_REF_RE.test(image) ? image : "",
+    });
+    if (out.length >= 4) break;
   }
   return out;
 }
@@ -585,7 +634,7 @@ function sanitizeCliVersion(raw) {
 
 const ADMIN_PORTS = new Set([
   2019, 2375, 2376, 3306, 5432, 6379, 27017, 9200, 11211, 15672, 8500, 2379, 6443, 9090, 5601, 7474, 7687, 1080, 6432,
-  11434, 6333, 19530, 9229, 9222,
+  11434, 6333, 19530, 9229, 9222, 18789,
 ]);
 
 const MAIL_PORTS = new Set([25, 465, 587, 993, 995, 110, 143]);
@@ -633,6 +682,7 @@ const SERVICE_NAME = {
   9229: "Node inspector",
   11211: "memcached",
   11434: "Ollama",
+  18789: "OpenClaw",
   15672: "RabbitMQ",
   19530: "Milvus",
   27017: "Mongo",
@@ -765,7 +815,10 @@ export function stuckFromTop(top = []) {
 
 const MINER_COMM = /^(xmrig|minerd|nbminer|t-rex|trex|ethminer|phoenixminer|lolminer|gminer|teamredminer|kdevtmpfsi|kinsing|sysupdate|networkservice)$/i;
 const MINER_HEX = /^[a-f0-9]{8,32}$/i;
+const MINER_BLOB = /xmrig|nicehash|nbminer|ethminer|lolminer|gminer|phoenixminer|teamredminer|minergate|cryptonight|monero.?miner|stratum\+tcp|--donate-level|kdevtmpfsi|kinsing/i;
+const GENERIC_COMM = /^(exe|sh|ash|busybox|sleep|wget|curl|perl|python|python3)$/i;
 const LEGIT_HOT = /^(php-fpm|php|node|nodejs|java|mysqld|postgres|redis-server|nginx|caddy|apache2|httpd|python|python3|ruby|uwsgi|gunicorn|sidekiq|beanstalkd)$/i;
+const LEGIT_IMAGE = /(?:^|\/)(nginx|redis|postgres(?:ql)?|mysql|mariadb|wordpress|caddy|traefik|php|php-fpm|node|n8n|elasticsearch|mongo(?:db)?|rabbitmq|memcached|minio|nextcloud|ghost|httpd|apache|varnish|haproxy|envoy|grafana|prometheus|portainer|ollama|qdrant|flowise|langflow|dify|python)(?::|$)/i;
 /** Tools the pulse itself (or the host agent) runs — never treat as miner/overload. */
 const PULSE_HELPER = /^(fail2ban-client|fail2ban-server|fail2ban|ss|ip|lsof|ps|systemctl|journalctl|docker|dockerd|containerd|setfacl|getfacl|ufw|iptables|ip6tables|nft|getent|chronyc|postconf|wg|sshd|orb44)$/i;
 
@@ -789,16 +842,41 @@ export function hotFromTop(top = [], memTotal) {
     .slice(0, 6);
 }
 
-/** Cryptojacking heuristic: known miner names, or near-100% CPU with tiny RSS and non-legit name. */
+export function minerBlobHit(blob) {
+  return MINER_BLOB.test(String(blob || ""));
+}
+
+export function legitContainerImage(image) {
+  return LEGIT_IMAGE.test(String(image || "").split("@")[0]);
+}
+
+/** Cryptojacking heuristic: known miner names, miner image/cmd, or hot tiny RSS. Container alpine `exe`/`python` counts; host php-fpm/java does not. */
 export function looksLikeMiner(proc = {}) {
   const comm = String(proc.comm || "").replace(/^.*\//, "").slice(0, 64);
   if (!comm) return false;
-  if (PULSE_HELPER.test(comm) || LEGIT_HOT.test(comm)) return false;
-  if (MINER_COMM.test(comm)) return true;
+  if (PULSE_HELPER.test(comm)) return false;
+  const image = String(proc.image || "");
+  const cmd = String(proc.cmd || "");
+  if (MINER_COMM.test(comm) || minerBlobHit(`${image} ${cmd} ${comm}`)) return true;
+  const inBox = Boolean(proc.container);
+  const legitBox = inBox && legitContainerImage(image);
+  const legitName = LEGIT_HOT.test(comm);
+  if (legitName && (!inBox || legitBox)) return false;
   if (MINER_HEX.test(comm) && Number(proc.cpuPct) >= 90) return true;
   const cpu = Number(proc.cpuPct);
   const rss = Number(proc.rssMb);
-  if (cpu >= 95 && Number.isFinite(rss) && rss > 0 && rss < 200) return true;
+  if (cpu >= 95 && Number.isFinite(rss) && rss > 0 && rss < 200 && !legitName) return true;
+  if (
+    inBox &&
+    !legitBox &&
+    (GENERIC_COMM.test(comm) || MINER_HEX.test(comm)) &&
+    cpu >= 90 &&
+    Number.isFinite(rss) &&
+    rss > 0 &&
+    rss < 250
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -897,6 +975,31 @@ export function insideServiceWorldPorts(pulse) {
   return [...new Set((pulse?.listen || []).filter((r) => exposed(r.addr) && ADMIN_PORTS.has(r.port)).map((r) => r.port))];
 }
 
+export function fmtListenBind(r = {}) {
+  const addr = exposed(r.addr) ? "0.0.0.0" : String(r.addr || "");
+  return `${addr}:${Number(r.port) || 0}`;
+}
+
+/** Newly world-exposed binds vs the previous pulse. Promoted = was loopback, now 0.0.0.0. */
+export function listenWorldDiff(prev, pulse) {
+  const world = (rows) => {
+    const m = new Map();
+    for (const r of rows || []) {
+      const p = Number(r.port);
+      if (!p || !exposed(r.addr)) continue;
+      if (!m.has(p)) m.set(p, r);
+    }
+    return m;
+  };
+  const now = world(pulse?.listen);
+  const was = world(prev?.listen);
+  const added = [...now.keys()].filter((p) => !was.has(p)).map((p) => now.get(p));
+  const gone = [...was.keys()].filter((p) => !now.has(p)).map((p) => was.get(p));
+  const prevListen = prev?.listen || [];
+  const promoted = added.filter((r) => prevListen.some((x) => Number(x.port) === Number(r.port) && !exposed(x.addr)));
+  return { added, gone, promoted };
+}
+
 export function collectHardening(listen = []) {
   const ufw = parseUfwStatus(runOut("ufw", ["status"]));
   let firewall = null;
@@ -972,6 +1075,17 @@ export function collectHardening(listen = []) {
     dockerHostMount: dockerInspect.hostMount,
     dockerEscape: dockerInspect.names,
     imageCves: matchImageCves(dockerInspect.images),
+    containerMiners: mergeContainerTop([], dockerInspect)
+      .filter((r) => looksLikeMiner(r))
+      .slice(0, 4)
+      .map((r) => ({
+        name: String(r.container || r.comm || "").slice(0, 40),
+        comm: String(r.comm || "").slice(0, 40),
+        cpuPct: Number(r.cpuPct) || 0,
+        rssMb: Number(r.rssMb) || 0,
+        image: String(r.image || "").slice(0, 80),
+      })),
+    _docker: dockerInspect,
     oomKills,
   };
 }
@@ -1182,16 +1296,151 @@ export function parseDockerInspectEscape(raw) {
   return { privileged, hostMount, names: names.slice(0, 8) };
 }
 
+/** Docker/cgroup id from /proc/<pid>/cgroup. No cmdline. */
+export function parseProcCgroup(text) {
+  const t = String(text || "");
+  const m =
+    t.match(/docker[-/]([0-9a-f]{12,64})/i) ||
+    t.match(/libpod-([0-9a-f]{12,64})/i) ||
+    t.match(/cri-containerd-([0-9a-f]{12,64})/i) ||
+    t.match(/containerd-([0-9a-f]{12,64})\.scope/i);
+  return m?.[1]?.toLowerCase() || null;
+}
+
+function parseMemToMb(raw) {
+  const m = String(raw || "").trim().match(/^([\d.]+)\s*([KMGT]i?B)?/i);
+  if (!m) return 0;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return 0;
+  const u = (m[2] || "B").toLowerCase();
+  if (u.startsWith("g")) return Math.round(n * 1024);
+  if (u.startsWith("m")) return Math.round(n);
+  if (u.startsWith("k")) return Math.max(1, Math.round(n / 1024));
+  return Math.max(0, Math.round(n / (1024 * 1024)));
+}
+
+/** `docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.PIDs}}'` */
+export function parseDockerStats(text) {
+  const out = [];
+  for (const line of String(text || "").split("\n")) {
+    const parts = line.trim().split(/\t+/);
+    if (parts.length < 3) continue;
+    const name = sanitizeComm(parts[0].replace(/^\//, ""));
+    if (!name || name === "NAME") continue;
+    const cpu = Number(String(parts[1]).replace(/%/g, "").trim());
+    const mem = parseMemToMb(String(parts[2]).split("/")[0]);
+    if (!Number.isFinite(cpu)) continue;
+    out.push({
+      name: name.slice(0, 40),
+      cpuPct: Math.max(0, Math.min(400, Math.round(cpu * 10) / 10)),
+      rssMb: Math.max(0, Math.min(1024 * 1024, mem)),
+    });
+    if (out.length >= 24) break;
+  }
+  return out;
+}
+
+/** Path/Args/Image only — never Config.Env. */
+export function parseDockerInspectMiners(raw) {
+  let arr;
+  try {
+    const parsed = JSON.parse(String(raw || "[]"));
+    arr = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const c of arr.slice(0, 32)) {
+    const id = String(c?.Id || c?.ID || "").replace(/^sha256:/i, "").toLowerCase();
+    const name = sanitizeComm(String(c?.Name || "").replace(/^\//, "")) || "container";
+    const image = String(c?.Config?.Image || c?.Image || "").slice(0, 180);
+    const path = String(c?.Path || "").slice(0, 80);
+    const args = Array.isArray(c?.Args) ? c.Args.map((a) => String(a).slice(0, 80)).slice(0, 8) : [];
+    const cmd = [path, ...args].join(" ").trim();
+    const hint = minerBlobHit(`${image} ${cmd}`);
+    out.push({
+      id: id.slice(0, 64),
+      name: name.slice(0, 40),
+      image: image.slice(0, 120),
+      cmd: cmd.slice(0, 120),
+      minerHint: hint,
+    });
+  }
+  return out.slice(0, 24);
+}
+
+export function matchContainerByCgroup(cgroupId, containers = []) {
+  const id = String(cgroupId || "").toLowerCase();
+  if (!id || id.length < 12) return null;
+  return (
+    (containers || []).find((c) => {
+      const cid = String(c.id || "").toLowerCase();
+      return cid && (cid.startsWith(id.slice(0, 12)) || id.startsWith(cid.slice(0, 12)));
+    }) || null
+  );
+}
+
+export function annotateTopContainers(top = [], containers = []) {
+  return (top || []).map((r) => {
+    const box = matchContainerByCgroup(r.cgroupId, containers);
+    if (!box) return r;
+    return { ...r, container: box.name, image: box.image, cmd: r.cmd || box.cmd };
+  });
+}
+
+export function mergeContainerTop(top = [], docker = {}) {
+  const stats = docker.stats || [];
+  const inspect = docker.miners || [];
+  const byName = new Map(inspect.map((c) => [c.name, c]));
+  const extra = [];
+  const seen = new Set((top || []).map((r) => `${r.container || ""}:${r.comm}`));
+  for (const s of stats) {
+    const meta = byName.get(s.name) || {};
+    const row = {
+      comm: sanitizeComm((meta.cmd || "").split(/\s+/)[0]) || s.name,
+      cpuPct: s.cpuPct,
+      rssMb: s.rssMb,
+      container: s.name,
+      image: meta.image || "",
+      cmd: meta.cmd || "",
+    };
+    if (!looksLikeMiner({ ...row, ...meta, cpuPct: s.cpuPct, rssMb: s.rssMb, container: s.name })) continue;
+    const key = `${s.name}:${row.comm}`;
+    if (seen.has(key) || seen.has(`:${s.name}`)) continue;
+    seen.add(key);
+    extra.push(row);
+  }
+  for (const c of inspect) {
+    if (!c.minerHint) continue;
+    if ((top || []).some((r) => r.container === c.name) || extra.some((r) => r.container === c.name)) continue;
+    extra.push({
+      comm: sanitizeComm((c.cmd || "").split(/\s+/)[0]) || c.name,
+      cpuPct: 0,
+      rssMb: 0,
+      container: c.name,
+      image: c.image,
+      cmd: c.cmd,
+    });
+  }
+  return [...extra, ...(top || [])].slice(0, 8);
+}
+
 function collectDockerInspect() {
   const ids = String(runOut("docker", ["ps", "-q"]) || "")
     .trim()
     .split(/\s+/)
     .filter((id) => /^[0-9a-f]{6,64}$/i.test(id))
     .slice(0, 24);
-  if (!ids.length) return { privileged: false, hostMount: false, names: [], images: [] };
+  if (!ids.length) return { privileged: false, hostMount: false, names: [], images: [], miners: [], stats: [] };
   const raw = runOut("docker", ["inspect", ...ids]);
   const escape = parseDockerInspectEscape(raw);
-  return { ...escape, images: parseDockerInspectImages(raw) };
+  const stats = parseDockerStats(runOut("docker", ["stats", "--no-stream", "--format", "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.PIDs}}"]));
+  return {
+    ...escape,
+    images: parseDockerInspectImages(raw),
+    miners: parseDockerInspectMiners(raw),
+    stats,
+  };
 }
 
 export function gradeInside(pulse = {}) {
@@ -1214,7 +1463,7 @@ export function gradeInside(pulse = {}) {
   if (h.sshPassword && h.sshRoot && h.sshWorld) return "D";
   if (!fw && exposedAdmin.length) return "D";
   if (!fw && !ban) return "D";
-  if (minersFromTop(pulse.top).length) return "D";
+  if (minersFromTop(pulse.top).length || (h.containerMiners || []).length) return "D";
   if (exposedAdmin.length || h.sshPassword || h.sshRoot) return "C";
   if (!fw || !ban) return "C";
   if (pulse?.apps?.mail?.openRelay) return "C";
@@ -1247,7 +1496,7 @@ export function compareInside(pulse, rec = {}, prev = null) {
     }
     if (held.length) {
       const names = [...new Set(held.map((r) => labelPort(r)))].join(", ");
-      notes.push(insideNote(hasStreet ? "listen-open-held" : "listen-open", "listen-open", { names }));
+      notes.push(insideNote(hasStreet ? "listen-open-held" : "listen-open", hasStreet ? "listen-open-held" : "listen-open", { names }));
     }
   }
   if (pulse?.originA?.length && streetIp && !pulse.originA.includes(streetIp)) {
@@ -1357,7 +1606,19 @@ export function compareInside(pulse, rec = {}, prev = null) {
   }
   const miners = minersFromTop(pulse?.top);
   if (miners.length) {
-    notes.push(insideNote("crypto-miner", "crypto-miner", { who: miners.map((r) => `${r.comm} ${r.cpuPct}%`).join(", ") }));
+    notes.push(
+      insideNote("crypto-miner", "crypto-miner", {
+        who: miners
+          .map((r) => `${r.comm}${r.container ? ` in ${r.container}` : ""} ${r.cpuPct}%`)
+          .join(", "),
+      })
+    );
+  } else if ((pulse?.hardening?.containerMiners || []).length) {
+    notes.push(
+      insideNote("crypto-miner", "crypto-miner", {
+        who: pulse.hardening.containerMiners.map((r) => `${r.comm || r.name} in ${r.name} ${r.cpuPct}%`).join(", "),
+      })
+    );
   }
   const hot = hotFromTop(pulse?.top, pulse?.memTotal).filter((r) => !looksLikeMiner(r));
   if (hot.length && !loadHigh) {
@@ -1492,10 +1753,11 @@ export function insideWatchReasons(pulse, prev, rec = {}) {
     );
   }
   if (prev) {
-    const nowPorts = insideServiceWorldPorts(pulse);
-    const prevPorts = new Set(insideServiceWorldPorts(prev));
-    const added = nowPorts.filter((p) => !prevPorts.has(p));
-    if (added.length) notes.push(insideNote("listen-new", "listen-new", { ports: added.join(", ") }));
+    const diff = listenWorldDiff(prev, pulse);
+    const addedAdmin = diff.added.filter((r) => ADMIN_PORTS.has(Number(r.port)));
+    if (addedAdmin.length) {
+      notes.push(insideNote("listen-new", "listen-new", { ports: addedAdmin.map(fmtListenBind).join(", ") }));
+    }
     const swap = httpListenSwapped(prev, pulse);
     if (swap) notes.push(insideNote("listen-swap-watch", "listen-swap", { from: swap.from, to: swap.to }));
   }
@@ -1598,16 +1860,33 @@ function collectFailedUnits() {
   }
 }
 
+export function collectBackupHints() {
+  const timers = run("systemctl", ["list-timers", "--all", "--no-pager", "--plain"]) || "";
+  let crontab = "";
+  for (const dir of ["/etc/cron.d", "/etc/cron.daily", "/etc/cron.hourly", "/etc/cron.weekly"]) {
+    try {
+      crontab += fs.readdirSync(dir).join("\n") + "\n";
+    } catch {
+      /* missing dir */
+    }
+  }
+  return parseBackupHints({ timers, crontab, units: timers });
+}
+
 export function collectPulse(opts = {}) {
   const { memUsed, memTotal } = memInfo();
   const { listen, named } = listenTable();
-  const top = topTable();
-  const hardening = collectHardening(listen);
+  const hardeningRaw = collectHardening(listen);
+  const docker = hardeningRaw._docker || {};
+  delete hardeningRaw._docker;
+  const top = mergeContainerTop(topTable(docker.miners || []), docker);
+  const hardening = hardeningRaw;
   const limited = listen.length > 0 && !named;
   const pressure = collectPressure();
   const grants = sanitizeGrants(opts.grants);
   const extra = collectRuntime({ listen, top, grants });
   const apps = collectApps({ listen, top, sshFails: extra.sshFails });
+  const backups = collectBackupHints();
   return sanitizePulse({
     ts: Date.now(),
     hostname: os.hostname(),
@@ -1627,6 +1906,7 @@ export function collectPulse(opts = {}) {
     runtime: extra.runtime,
     errors: extra.errors,
     apps,
+    backups,
   });
 }
 

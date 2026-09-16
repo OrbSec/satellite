@@ -1,5 +1,5 @@
 /** Pulse advice copy for satellite notes. Stored notes keep English + id/vars; UI localizes. */
-export const INSIDE_NOTE_LANGS = ["en", "ru", "es", "ko"];
+export const INSIDE_NOTE_LANGS = ["en", "es"];
 
 const BIND_DO_EN =
   "In docker-compose bind those services to loopback. Example: 6379:6379 → 127.0.0.1:6379:6379. Same for 5432, 7474 and the other orange labels. Then only programs on this server can connect. Orb44 will not edit the file.";
@@ -253,7 +253,21 @@ export const INSIDE_NOTES = {
     },
     "listen-new": {
       title: "New service port on 0.0.0.0",
-      text: "Appeared: {ports}. They were not there on the last pulse.",
+      text: "Yesterday these weren't on the outside: {ports}.",
+    },
+    "listen-baseline": {
+      title: "The machine opened a port that was not in the first snapshot",
+      text: "The first full scan plus satellite freeze did not have {ports} on 0.0.0.0. This is environment drift on the box, not a new CVE.",
+      do: "Bind the new listener to 127.0.0.1 if the internet should not reach it. Orb44 does not edit compose.",
+    },
+    "cms-paired": {
+      title: "CMS on disk matches what the street scan named",
+      text: "The satellite sees {names} on this machine, and the internet snapshot named the same family. Street and inside are looking at the same stack.",
+    },
+    "cms-inside": {
+      title: "CMS on disk that the street scan did not name",
+      text: "On this machine the satellite sees {names} (a typical path on disk). The internet snapshot did not name that CMS — a shield, another vhost, or the site in front is different.",
+      do: "Check that the satellite is on the origin that serves this hostname. Orb44 does not read wp-config.",
     },
     "failed-unit": {
       title: "A systemd unit failed",
@@ -512,7 +526,21 @@ export const INSIDE_NOTES = {
     },
     "listen-new": {
       title: "Новый служебный порт на 0.0.0.0",
-      text: "Появились {ports}. С прошлого пульса их не было.",
+      text: "Вчера снаружи этого не было: {ports}.",
+    },
+    "listen-baseline": {
+      title: "На машине открылся порт, которого не было в первом снимке",
+      text: "В заморозке первого полного скана плюс сателлита не было {ports} на 0.0.0.0. Это сдвиг среды на ящике, не новая CVE.",
+      do: "Если с улицы туда не должны ходить — привяжите слушатель к 127.0.0.1. Orb44 compose не правит.",
+    },
+    "cms-paired": {
+      title: "CMS на диске совпала с тем, что назвал уличный скан",
+      text: "Сателлит видит {names} на этой машине, и снимок с улицы назвал ту же семью. Улица и изнутри смотрят на один стек.",
+    },
+    "cms-inside": {
+      title: "CMS на диске, которую уличный скан не назвал",
+      text: "На машине сателлит видит {names} (типичный путь на диске). Снимок с улицы эту CMS не назвал — щит, другой vhost или спереди другой сайт.",
+      do: "Проверьте, что сателлит стоит на origin этого hostname. wp-config Orb44 не читает.",
     },
     "failed-unit": {
       title: "Упал systemd-юнит",
@@ -771,7 +799,21 @@ export const INSIDE_NOTES = {
     },
     "listen-new": {
       title: "Puerto de servicio nuevo en 0.0.0.0",
-      text: "Aparecieron {ports}. En el pulso anterior no estaban.",
+      text: "Ayer esto no estaba en el exterior: {ports}.",
+    },
+    "listen-baseline": {
+      title: "La máquina abrió un puerto que no estaba en la primera captura",
+      text: "La congelación del primer escaneo completo más satélite no tenía {ports} en 0.0.0.0. Es deriva del entorno en la caja, no un CVE nuevo.",
+      do: "Ate el listener a 127.0.0.1 si internet no debe llegar. Orb44 no edita compose.",
+    },
+    "cms-paired": {
+      title: "El CMS en disco coincide con lo que nombró el escaneo de la calle",
+      text: "El satélite ve {names} en esta máquina, y la captura de internet nombró la misma familia. Calle e interior miran el mismo stack.",
+    },
+    "cms-inside": {
+      title: "CMS en disco que el escaneo de la calle no nombró",
+      text: "En esta máquina el satélite ve {names} (una ruta típica en disco). La captura de internet no nombró ese CMS — un escudo, otro vhost, o el sitio de delante es otro.",
+      do: "Compruebe que el satélite está en el origin de este hostname. Orb44 no lee wp-config.",
     },
     "failed-unit": {
       title: "Falló una unidad systemd",
@@ -1030,7 +1072,21 @@ export const INSIDE_NOTES = {
     },
     "listen-new": {
       title: "0.0.0.0에 새 서비스 포트",
-      text: "생김: {ports}. 지난 펄스에는 없었습니다.",
+      text: "어제 밖에서는 없었습니다: {ports}.",
+    },
+    "listen-baseline": {
+      title: "첫 스냅샷에 없던 포트가 머신에서 열림",
+      text: "첫 전체 스캔+새틀라이트 동결에 0.0.0.0의 {ports}가 없었습니다. CVE가 아니라 박스 환경 드리프트입니다.",
+      do: "인터넷이 닿으면 안 되면 리스너를 127.0.0.1에 묶으세요. Orb44는 compose를 고치지 않습니다.",
+    },
+    "cms-paired": {
+      title: "디스크의 CMS가 외부 스캔이 부른 것과 같음",
+      text: "새틀라이트가 이 머신에서 {names}를 보고, 인터넷 스냅샷도 같은 계열을 불렀습니다. 거리와 내부가 같은 스택을 봅니다.",
+    },
+    "cms-inside": {
+      title: "외부 스캔이 부르지 않은 디스크 CMS",
+      text: "이 머신에서 새틀라이트가 {names}를 봅니다(디스크의 전형적인 경로). 인터넷 스냅샷은 그 CMS를 부르지 않았습니다 — 실드, 다른 vhost, 또는 앞의 사이트가 다릅니다.",
+      do: "새틀라이트가 이 호스트명의 origin에 있는지 확인하세요. Orb44는 wp-config를 읽지 않습니다.",
     },
     "failed-unit": {
       title: "systemd 유닛이 실패함",

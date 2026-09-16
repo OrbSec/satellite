@@ -10,7 +10,7 @@ import { LANGS, LANG_LABEL, detectLang, normalizeLang, t } from "../server/sat-i
 import { localizeInsideNote } from "../web/inside-notes.js";
 import { pickFromList } from "../server/cli-menu.mjs";
 import { SYSTEM_DEVICE, parseDeviceJson, hasExistingInstall, pickLiveDevice, deviceSearchPaths, loadFirstDevice, stripDevicePath } from "../server/sat-local.mjs";
-import { CLI_PACKAGE, cmpVer, readCliVersion, pickSatRoots, staleSatRoots, applyUpdateTree, fetchLatestMeta, unpackTarball } from "../server/sat-update.mjs";
+import { CLI_PACKAGE, cmpVer, readCliVersion, pickSatRoots, staleSatRoots, applyUpdateTree, fetchLatestMeta, resolveUpdateSource, unpackTarball } from "../server/sat-update.mjs";
 import { cabinetRequest, apiFailText } from "../server/sat-http.mjs";
 import {
   probeAccessTargets,
@@ -18,6 +18,7 @@ import {
   supplementaryGroups,
   applySatelliteAccess,
   accessManualHints,
+  satelliteServiceHardening,
 } from "../server/sat-access.mjs";
 import { runLiveTop, topIntervalSec } from "../server/sat-top.mjs";
 
@@ -43,6 +44,7 @@ function args() {
       out.journal = true;
     }
     else if (a === "--force") out.force = true;
+    else if (a === "--npm") out.npm = true;
     else if (a === "--purge") out.purge = true;
     else if (a === "--once") out.once = true;
     else if (a === "--version" || a === "-V" || a === "-v") out.version = true;
@@ -130,14 +132,21 @@ function localCliVersion() {
 }
 
 async function latestCliVersion() {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 5000);
+  const fetchFn = (url, init) => fetch(url, { ...init, signal: ac.signal });
   try {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), 4000);
-    const meta = await fetchLatestMeta((url, init) => fetch(url, { ...init, signal: ac.signal }));
-    clearTimeout(timer);
+    const meta = await resolveUpdateSource({ npmOnly: false }, fetchFn);
     return meta.version;
   } catch {
-    return null;
+    try {
+      const meta = await fetchLatestMeta(fetchFn);
+      return meta.version;
+    } catch {
+      return null;
+    }
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -261,7 +270,7 @@ async function wantAccess(opts, { logs = false } = {}) {
       ? await wantOneAccess(opts, "fail2ban", "ask_access_fail2ban", "access_yes", "access_no", { ifYes, index: 1 })
       : Boolean(opts.fail2ban),
     docker: probe.docker
-      ? await wantOneAccess(opts, "docker", "ask_access_docker", "access_yes", "access_no", { ifYes, index: 1 })
+      ? await wantOneAccess(opts, "docker", "ask_access_docker", "access_yes", "access_no", { ifYes: false, index: 0 })
       : Boolean(opts.docker),
     journal: probe.journal || probe.webLogs
       ? await wantOneAccess(opts, "journal", "ask_access_journal", "access_yes", "access_no", {
@@ -540,7 +549,7 @@ function systemdUnit({ node, script, deviceFile, interval, user, groups = [] }) 
     "RestartSec=20",
     `Environment=ORB44_DEVICE_FILE=${deviceFile}`,
     `Environment=ORB44_LANG=${lang}`,
-    "NoNewPrivileges=true",
+    ...satelliteServiceHardening({ systemUser: Boolean(user) }),
     "",
     "[Install]",
     `WantedBy=${user ? "multi-user.target" : "default.target"}`
@@ -855,13 +864,17 @@ async function cmdUpdate() {
   const current = readCliVersion(SCRIPT);
   let meta;
   try {
-    meta = await fetchLatestMeta();
+    meta = await resolveUpdateSource({ npmOnly: Boolean(opts.npm) });
   } catch (e) {
     printVersions(current, null);
-    console.error("⚠️  " + t(lang, "update_fail", { err: `: ${String(e.message || e).slice(0, 160)}` }));
+    const msg = String(e.message || e).slice(0, 160);
+    console.error("⚠️  " + t(lang, opts.npm ? "update_fail" : "update_unsigned", { err: `: ${msg}`, version: "" }));
+    if (!opts.npm) console.log(dim(t(lang, "update_npm_hint")));
     process.exit(1);
   }
   printVersions(current, meta.version);
+  console.log(dim(t(lang, "update_via", { source: meta.source })));
+  if (!meta.signed) console.log(dim(t(lang, "update_npm_weak")));
   const pin = t(lang, "update_npx", { version: meta.version });
   const roots = pickSatRoots(SCRIPT);
   const stale = staleSatRoots(roots, meta.version, { force: Boolean(opts.force) });
@@ -878,7 +891,11 @@ async function cmdUpdate() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "orb44-upd-"));
   let wrote = [];
   try {
-    const pkg = await unpackTarball(meta.tarball, tmp);
+    const pkg = await unpackTarball(meta.tarball, tmp, fetch, {
+      integrity: meta.integrity,
+      shasum: meta.shasum,
+      sha256: meta.sha256,
+    });
     const blocked = [];
     for (const root of stale) {
       try {
@@ -957,6 +974,30 @@ async function cmdLogout() {
   console.log("✅  " + t(lang, "logged_out"));
 }
 
+async function cmdRotate() {
+  applyLang(opts);
+  const rec = loadDeviceRecord();
+  if (!rec?.secret) {
+    console.error("⚠️  " + t(lang, "need_login"));
+    process.exit(1);
+  }
+  const srcPath = rec.path || DEVICE_FILE;
+  const device = stripDevicePath(rec);
+  const out = await api(device.api, "/api/satellites/rotate", {
+    method: "POST",
+    json: { secret: device.secret },
+    secret: device.secret,
+  });
+  if (!out.ok || !out.body?.secret) {
+    console.error(failLine(out, "rotate_fail"));
+    process.exit(1);
+  }
+  device.secret = String(out.body.secret);
+  persistDevice(device, [srcPath, SYSTEM_DEVICE]);
+  console.log("✅  " + t(lang, "rotate_ok"));
+  console.log(dim(t(lang, "key_file", { file: srcPath })));
+}
+
 async function cmdLang(flags) {
   const want = normalizeLang(flags._[1] || flags.lang);
   if (want) {
@@ -999,6 +1040,7 @@ const run = {
   uninstall: () => cmdUninstall(opts),
   status: cmdStatus,
   update: cmdUpdate,
+  rotate: cmdRotate,
   version: cmdVersion,
   logout: cmdLogout,
   lang: () => cmdLang(opts),
