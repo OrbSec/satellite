@@ -167,6 +167,10 @@ const STR = {
     top_load: "load",
     top_ram: "RAM",
     top_disk: "disk",
+    top_mem: "Mem",
+    top_dsk: "Dsk",
+    top_loadavg: "Load average",
+    top_uptime: "Uptime",
     top_listen: "LISTEN",
     top_procs: "TOP",
     top_acc_web: "storefront",
@@ -175,7 +179,7 @@ const STR = {
     top_acc_local: "local only",
     top_miner_tag: "miner?",
     top_hot_tag: "hot",
-    top_footer: "Live session graphs · nothing saved · Watch & street → app.orb44.com",
+    top_footer: "Live snapshot · nothing saved · Watch & street → app.orb44.com",
     top_keys: "q quit · Ctrl+C",
     help: `Orb44 satellite {version} — admin device.
 
@@ -342,6 +346,10 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     top_load: "load",
     top_ram: "RAM",
     top_disk: "диск",
+    top_mem: "Mem",
+    top_dsk: "Dsk",
+    top_loadavg: "нагрузка",
+    top_uptime: "аптайм",
     top_listen: "СЛУШАЕТ",
     top_procs: "ТОП",
     top_acc_web: "витрина",
@@ -350,7 +358,7 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     top_acc_local: "только машина",
     top_miner_tag: "майнер?",
     top_hot_tag: "горячий",
-    top_footer: "Графики только в этой сессии · ничего не пишем · Watch и улица → app.orb44.com",
+    top_footer: "Снимок сейчас · ничего не пишем · Watch и улица → app.orb44.com",
     top_keys: "q выход · Ctrl+C",
     help: `Orb44 сателлит {version} — устройство админа.
 
@@ -515,6 +523,10 @@ install: демон (да), логи (нет), затем доступ к fail2b
     top_load: "load",
     top_ram: "RAM",
     top_disk: "디스크",
+    top_mem: "Mem",
+    top_dsk: "Dsk",
+    top_loadavg: "Load average",
+    top_uptime: "Uptime",
     top_listen: "LISTEN",
     top_procs: "TOP",
     top_acc_web: "스토어프론트",
@@ -523,7 +535,7 @@ install: демон (да), логи (нет), затем доступ к fail2b
     top_acc_local: "로컬만",
     top_miner_tag: "채굴?",
     top_hot_tag: "과열",
-    top_footer: "세션 그래프만 · 저장 없음 · Watch·거리 → app.orb44.com",
+    top_footer: "지금 스냅샷 · 저장 없음 · Watch·거리 → app.orb44.com",
     top_keys: "q 종료 · Ctrl+C",
     help: `Orb44 위성 {version} — 관리자 장치.
 
@@ -694,6 +706,10 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     top_load: "load",
     top_ram: "RAM",
     top_disk: "disco",
+    top_mem: "Mem",
+    top_dsk: "Dsk",
+    top_loadavg: "Load average",
+    top_uptime: "Uptime",
     top_listen: "ESCUCHA",
     top_procs: "TOP",
     top_acc_web: "vitrina",
@@ -702,7 +718,7 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     top_acc_local: "solo local",
     top_miner_tag: "¿minero?",
     top_hot_tag: "caliente",
-    top_footer: "Gráficos de esta sesión · no se guarda · Watch y calle → app.orb44.com",
+    top_footer: "Live snapshot · nothing saved · Watch y calle → app.orb44.com",
     top_keys: "q salir · Ctrl+C",
     help: `Satélite Orb44 {version} — dispositivo de admin.
 

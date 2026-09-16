@@ -69,11 +69,78 @@ export function clipLine(s, cols) {
   return out;
 }
 
+function fillColor(pct) {
+  if (pct >= 90) return "\x1b[31m";
+  if (pct >= 70) return "\x1b[33m";
+  return "\x1b[32m";
+}
+
 export function bar(pct, width = 10) {
   const w = Math.max(4, Math.floor(Number(width) || 0));
   const n = Math.max(0, Math.min(100, Number(pct) || 0));
   const filled = Math.round((n / 100) * w);
-  return "#".repeat(filled) + " ".repeat(Math.max(0, w - filled));
+  return `${fillColor(n)}${"|".repeat(filled)}\x1b[0m${" ".repeat(Math.max(0, w - filled))}`;
+}
+
+/** htop-style `Mem[||||||||     5.7G/15.6G]` — value sits in the empty tail, never on the right margin. */
+export function htopBar(label, pct, text, width) {
+  const prefix = `${label}[`;
+  const inner = Math.max(8, Math.floor(Number(width) || 0) - visLen(prefix) - 1);
+  const value = ` ${text}`;
+  const textW = Math.min(inner - 1, Math.max(visLen(value), 6));
+  const barW = Math.max(1, inner - textW);
+  const n = Math.max(0, Math.min(100, Number(pct) || 0));
+  return `${prefix}${bar(n, barW)}${dim(pad(value, textW, { align: "right" }))}]`;
+}
+
+export function cpuTick(prev, cpus = os.cpus()) {
+  const list = Array.isArray(cpus) ? cpus : [];
+  const snap = list.map((c) => {
+    const t = c?.times || {};
+    const total = ["user", "nice", "sys", "idle", "irq"].reduce((a, k) => a + (Number(t[k]) || 0), 0);
+    return { idle: Number(t.idle) || 0, total };
+  });
+  const pcts = snap.map((s, i) => {
+    const p = prev?.[i];
+    if (!p || s.total <= p.total) return 0;
+    const dt = s.total - p.total;
+    const di = Math.max(0, s.idle - p.idle);
+    return Math.max(0, Math.min(100, (1 - di / dt) * 100));
+  });
+  return { snap, pcts };
+}
+
+function fmtUptime(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  const clock = `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`;
+  return d ? `${d} days, ${clock}` : clock;
+}
+
+function cpuMeterLines(pcts, width) {
+  const n = Math.max(1, Math.min(16, pcts.length));
+  const colsN = n <= 1 ? 1 : n <= 4 ? 2 : 4;
+  const rowsN = Math.ceil(n / colsN);
+  const cellW = Math.max(12, Math.floor((width - (colsN - 1)) / colsN));
+  const lines = [];
+  for (let row = 0; row < rowsN; row++) {
+    const parts = [];
+    for (let col = 0; col < colsN; col++) {
+      const i = col * rowsN + row;
+      if (i >= n) {
+        parts.push(pad("", cellW));
+        continue;
+      }
+      const p = Number(pcts[i]) || 0;
+      const label = String(i).padStart(Math.max(1, String(n - 1).length), " ");
+      parts.push(htopBar(label, p, `${p.toFixed(1)}%`, cellW));
+    }
+    lines.push(parts.join(" ").trimEnd());
+  }
+  return lines;
 }
 
 export function sparkline(values, width) {
@@ -159,30 +226,38 @@ export function topIntervalSec(raw) {
   return Math.max(1, Math.min(30, Math.round(n)));
 }
 
-function meterLine(label, value, pct, spark, cols) {
-  const sparkW = 16;
-  const left = `${label} ${value} ${dim("[")}${sparkline(spark, sparkW)}${dim("]")} `;
-  const budget = Math.max(20, cols);
-  const barW = Math.max(8, budget - visLen(left));
-  return clipLine(`${left}${bar(pct, barW)}`, budget);
-}
-
-function postureLine(pulse, lang, grade) {
+function infoLines(pulse, lang, opts = {}) {
   const h = pulse?.hardening || {};
   const apps = pulse?.apps || {};
-  const bits = [
-    `${t(lang, "top_grade")} ${grade || "—"}`,
-    `${t(lang, "preview_row_fw")} ${h.firewall || t(lang, "preview_fw_no")}`,
-    h.fail2ban || t(lang, "preview_ban_no"),
+  const ssh = h.sshPassword ? t(lang, "preview_ssh_pass") : h.sshPassword === false ? t(lang, "preview_ssh_key") : "—";
+  const listen = collapseListen([...(pulse?.listen || [])]);
+  const kinds = { risk: 0, warn: 0, info: 0, ok: 0, local: 0 };
+  for (const r of listen) kinds[listenAccessKind(r)] = (kinds[listenAccessKind(r)] || 0) + 1;
+  const street = kinds.risk + kinds.warn;
+  const l1 = Number.isFinite(Number(pulse?.load1)) ? Number(pulse.load1).toFixed(2) : "—";
+  const l5 = Number.isFinite(Number(pulse?.load5)) ? Number(pulse.load5).toFixed(2) : null;
+  const l15 = Number.isFinite(Number(pulse?.load15)) ? Number(pulse.load15).toFixed(2) : null;
+  const load = [l1, l5, l15].filter(Boolean).join(" ");
+  const lines = [
+    `${t(lang, "top_loadavg")}: ${load}`,
+    `${t(lang, "top_uptime")}: ${fmtUptime(opts.uptimeSec)}`,
+    `SSH ${ssh} · ${t(lang, "preview_row_fw")} ${h.firewall || t(lang, "preview_fw_no")}`,
+    `${h.fail2ban || t(lang, "preview_ban_no")}${h.timesync ? ` · ${h.timesync}` : ""}${h.updates ? ` · ${t(lang, "preview_row_upd")}` : ""}`,
+    `${t(lang, "top_acc_public")} ${street} · ${t(lang, "top_acc_restricted")} ${kinds.info} · ${t(lang, "top_acc_web")} ${kinds.ok}`,
   ];
-  if (pulse?.limited) bits.push(t(lang, "preview_limited"));
-  if (h.dockerSockWorld) bits.push(`docker.sock ${h.dockerSockMode || "open"}`);
-  if (h.dockerPrivileged) bits.push("privileged ctr");
+  if (pulse?.oom) lines.push("OOM");
+  if (pulse?.failedUnit) lines.push(String(pulse.failedUnit));
+  if (h.dockerSockWorld) lines.push(`docker.sock ${h.dockerSockMode || "open"}`);
+  if (h.dockerPrivileged) lines.push("privileged ctr");
+  if (h.sshPassword) lines.push(t(lang, "preview_ssh_pass"));
   const cms = Array.isArray(apps.cms) ? apps.cms.filter(Boolean).slice(0, 3).join(",") : "";
-  if (cms) bits.push(cms);
-  if (apps.mail?.kind) bits.push(String(apps.mail.kind));
-  if (apps.vpn?.kind) bits.push(String(apps.vpn.kind));
-  return dim(bits.join(" · "));
+  if (cms) lines.push(cms);
+  if (apps.mail?.kind) lines.push(String(apps.mail.kind));
+  if (apps.vpn?.kind) lines.push(String(apps.vpn.kind));
+  if (pulse?.limited) lines.push(t(lang, "preview_limited"));
+  const miners = (pulse?.top || []).filter((r) => looksLikeMiner(r) && !isPulseHelper(r));
+  if (miners.length) lines.push(t(lang, "top_miner_tag"));
+  return lines.map((ln) => dim(ln));
 }
 
 function listenLines(pulse, lang, width, maxRows) {
@@ -204,9 +279,10 @@ function listenLines(pulse, lang, width, maxRows) {
   for (const r of rows) {
     const kind = listenAccessKind(r);
     const svc = serviceName(r.port) || r.comm || "—";
-    out.push(
-      `  ${pad(r.addr || "—", addrW)} ${pad(String(r.port ?? ""), 5, { align: "right" })}  ${pad(svc, svcW)} ${pad(r.comm || "—", commW)} ${accessLabel(lang, kind)}`
-    );
+    const row = `  ${pad(r.addr || "—", addrW)} ${pad(String(r.port ?? ""), 5, { align: "right" })}  ${pad(svc, svcW)} ${pad(r.comm || "—", commW)} ${accessLabel(lang, kind)}`;
+    if (kind === "risk") out.push(`\x1b[31m${row}\x1b[0m`);
+    else if (kind === "warn") out.push(`\x1b[33m${row}\x1b[0m`);
+    else out.push(row);
   }
   if (listen.length > rows.length) out.push(dim(`  +${listen.length - rows.length}`));
   return out.slice(0, maxRows);
@@ -237,8 +313,8 @@ function procLines(pulse, lang, width, maxRows) {
   return out.slice(0, maxRows);
 }
 
-function zipColumns(left, right, cols) {
-  const mid = Math.floor(cols / 2) - 1;
+function zipColumns(left, right, cols, leftW) {
+  const mid = Math.max(8, Math.min(Math.floor(Number(leftW) || cols / 2), cols - 12));
   const n = Math.max(left.length, right.length);
   const out = [];
   for (let i = 0; i < n; i++) {
@@ -251,19 +327,24 @@ function zipColumns(left, right, cols) {
  * One screen of live data. Pure string — easy to test.
  */
 export function formatTopScreen(pulse, lang = "en", opts = {}) {
-  const { now = Date.now(), intervalSec = 2, version = "", cols: colsOpt, rows: rowsOpt, history = null } = opts;
+  const { now = Date.now(), intervalSec = 2, version = "", cols: colsOpt, rows: rowsOpt, cpuPcts: cpuOpt, uptimeSec = 0 } = opts;
   const cols = Math.max(60, Math.min(240, Number(colsOpt) || 80));
   const rows = Math.max(16, Math.min(80, Number(rowsOpt) || 24));
   const grade = pulse?.gradeInside || gradeInside(pulse || {}) || "—";
   const clock = new Date(now).toLocaleTimeString(undefined, { hour12: false });
   const host = pulse?.hostname || "—";
-  const l1 = Number.isFinite(Number(pulse?.load1)) ? Number(pulse.load1).toFixed(2) : "—";
-  const l5 = Number.isFinite(Number(pulse?.load5)) ? Number(pulse.load5).toFixed(2) : null;
-  const l15 = Number.isFinite(Number(pulse?.load15)) ? Number(pulse.load15).toFixed(2) : null;
-  const loadTxt = l5 && l15 ? `${l1} ${dim(`${l5} ${l15}`)}` : l1;
-  const ram = `${gb(pulse?.memUsed)}/${gb(pulse?.memTotal)}G`;
-  const disk = pulse?.diskUsedPct != null ? `${pulse.diskUsedPct}%` : "—";
-  const hist = history || { load: [], ram: [], disk: [] };
+  const ncpu = Math.max(1, Number(pulse?.pressure?.cpus) || 1);
+  const cpuPcts =
+    Array.isArray(cpuOpt) && cpuOpt.length
+      ? cpuOpt.slice(0, 16)
+      : [Math.min(100, ((Number(pulse?.load1) || 0) / ncpu) * 100)];
+  const leftW = Math.max(38, Math.min(cols - 28, Math.floor(cols * 0.58)));
+  const meters = [
+    ...cpuMeterLines(cpuPcts, leftW),
+    htopBar(t(lang, "top_mem"), memPct(pulse), `${gb(pulse?.memUsed)}/${gb(pulse?.memTotal)}G`, leftW),
+    htopBar(t(lang, "top_dsk"), Number(pulse?.diskUsedPct) || 0, pulse?.diskUsedPct != null ? `${pulse.diskUsedPct}%` : "—", leftW),
+  ];
+  const info = infoLines(pulse, lang, { uptimeSec });
   const headLeft = `${bold(t(lang, "top_title"))}  ${t(lang, "top_grade")} ${gradePaint(grade)}  ${host}`;
   const headRight = dim([clock, t(lang, "top_refresh", { sec: intervalSec }), version || ""].filter(Boolean).join("  "));
   const headGap = Math.max(1, cols - visLen(headLeft) - visLen(headRight));
@@ -271,14 +352,7 @@ export function formatTopScreen(pulse, lang = "en", opts = {}) {
     visLen(headLeft) + 1 + visLen(headRight) <= cols
       ? `${headLeft}${" ".repeat(headGap)}${headRight}`
       : clipLine(`${headLeft}  ${headRight}`, cols);
-  const lines = [
-    head,
-    meterLine(t(lang, "top_load"), loadTxt, Math.min(100, Number(pulse?.load1) * 25), hist.load, cols),
-    meterLine(t(lang, "top_ram"), ram, memPct(pulse), hist.ram, cols),
-    meterLine(t(lang, "top_disk"), disk, Number(pulse?.diskUsedPct) || 0, hist.disk, cols),
-    postureLine(pulse, lang, grade),
-    "",
-  ];
+  const lines = [head, ...zipColumns(meters, info, cols, leftW), ""];
   const footer = [dim(t(lang, "top_footer")), dim(t(lang, "top_keys"))];
   const bodyBudget = Math.max(8, rows - footer.length - lines.length);
   const wide = cols >= 108;
@@ -322,8 +396,18 @@ export async function runLiveTop({
   const paint = () => {
     const pulse = withLoadavg(collect() || {});
     pushTopSample(history, pulse);
+    const cpu = cpuTick(history.cpuSnap);
+    history.cpuSnap = cpu.snap;
     const { cols, rows } = termSize(stdout);
-    const frame = formatTopScreen(pulse, lang, { intervalSec: sec, version, cols, rows, history });
+    const frame = formatTopScreen(pulse, lang, {
+      intervalSec: sec,
+      version,
+      cols,
+      rows,
+      history,
+      cpuPcts: cpu.pcts,
+      uptimeSec: os.uptime(),
+    });
     if (!tty) {
       stdout.write(frame);
       return;
