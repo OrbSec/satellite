@@ -15,7 +15,7 @@ import {
 import { t } from "./sat-i18n.mjs";
 import { incompleteEscape, parseMenuKey } from "./cli-menu.mjs";
 
-const SPARK = "▁▂▃▄▅▆▇█";
+const SPARK = " .:-=+*#";
 export const TOP_HISTORY = 90;
 
 function dim(s) {
@@ -44,27 +44,48 @@ export function pad(s, n, { align = "left" } = {}) {
   const extra = n - visLen(str);
   if (extra > 0) return align === "right" ? " ".repeat(extra) + str : str + " ".repeat(extra);
   if (extra === 0) return str;
-  const plain = str.replace(/\x1b\[[0-9;]*m/g, "");
-  return plain.slice(0, Math.max(0, n));
+  return clipLine(str, Math.max(0, n));
+}
+
+export function clipLine(s, cols) {
+  const max = Math.max(0, Math.floor(Number(cols) || 0));
+  const str = String(s ?? "");
+  let out = "";
+  let n = 0;
+  for (let i = 0; i < str.length; ) {
+    if (str[i] === "\u001b" && str[i + 1] === "[") {
+      const m = str.slice(i).match(/^\u001b\[[0-9;]*m/);
+      if (m) {
+        out += m[0];
+        i += m[0].length;
+        continue;
+      }
+    }
+    if (n >= max) break;
+    out += str[i];
+    n += 1;
+    i += 1;
+  }
+  return out;
 }
 
 export function bar(pct, width = 10) {
   const w = Math.max(4, Math.floor(Number(width) || 0));
   const n = Math.max(0, Math.min(100, Number(pct) || 0));
   const filled = Math.round((n / 100) * w);
-  return "█".repeat(filled) + "░".repeat(Math.max(0, w - filled));
+  return "#".repeat(filled) + ".".repeat(Math.max(0, w - filled));
 }
 
 export function sparkline(values, width) {
   const w = Math.max(2, Math.min(120, Math.floor(Number(width) || 0)));
   const nums = (values || []).map(Number).filter((n) => Number.isFinite(n));
-  if (!nums.length) return dim("·".repeat(w));
+  if (!nums.length) return ".".repeat(w);
   const slice = nums.length > w ? nums.slice(nums.length - w) : nums;
   const min = Math.min(...slice);
   const max = Math.max(...slice);
   const span = max - min || 1;
-  const chars = slice.map((v) => SPARK[Math.min(7, Math.max(0, Math.round(((v - min) / span) * 7)))]);
-  return dim("·".repeat(Math.max(0, w - chars.length))) + chars.join("");
+  const chars = slice.map((v) => SPARK[Math.min(SPARK.length - 1, Math.max(0, Math.round(((v - min) / span) * (SPARK.length - 1))))]);
+  return ".".repeat(Math.max(0, w - chars.length)) + chars.join("");
 }
 
 export function pushTopSample(history, pulse, { cap = TOP_HISTORY } = {}) {
@@ -95,8 +116,10 @@ function memPct(pulse) {
 }
 
 export function termSize(stdout = process.stdout) {
-  const cols = Math.max(60, Math.min(240, Number(stdout?.columns) || 80));
-  const rows = Math.max(16, Math.min(80, Number(stdout?.rows) || 24));
+  const rawCols = Number(stdout?.columns) || 80;
+  const rawRows = Number(stdout?.rows) || 24;
+  const cols = Math.max(60, Math.min(240, rawCols - 1));
+  const rows = Math.max(16, Math.min(80, rawRows));
   return { cols, rows };
 }
 
@@ -237,11 +260,11 @@ export function formatTopScreen(pulse, lang = "en", opts = {}) {
   const hist = history || { load: [], ram: [], disk: [] };
   const head = `${bold(t(lang, "top_title"))}  ${host}  ${t(lang, "top_grade")} ${gradePaint(grade)}  ${dim(clock)}  ${dim(t(lang, "top_refresh", { sec: intervalSec }))}${version ? dim(`  ${version}`) : ""}`;
   const lines = [
-    pad(head, cols),
+    head,
     meterLine(t(lang, "top_load"), loadTxt, Math.min(100, Number(pulse?.load1) * 25), hist.load, cols),
     meterLine(t(lang, "top_ram"), ram, memPct(pulse), hist.ram, cols),
     meterLine(t(lang, "top_disk"), disk, Number(pulse?.diskUsedPct) || 0, hist.disk, cols),
-    pad(postureLine(pulse, lang), cols),
+    postureLine(pulse, lang),
     "",
   ];
   const footer = [dim(t(lang, "top_footer")), dim(t(lang, "top_keys"))];
@@ -258,8 +281,8 @@ export function formatTopScreen(pulse, lang = "en", opts = {}) {
     lines.push(...procLines(pulse, lang, cols, procN));
   }
   while (lines.length < rows - footer.length) lines.push("");
-  const fitted = lines.slice(0, rows - footer.length);
-  return [...fitted, ...footer].join("\n") + "\n";
+  const fitted = lines.slice(0, rows - footer.length).map((ln) => clipLine(ln, cols));
+  return [...fitted, ...footer.map((ln) => clipLine(ln, cols))].join("\n") + "\n";
 }
 
 function withLoadavg(pulse) {
@@ -289,7 +312,7 @@ export async function runLiveTop({
     pushTopSample(history, pulse);
     const { cols, rows } = termSize(stdout);
     const frame = formatTopScreen(pulse, lang, { intervalSec: sec, version, cols, rows, history });
-    if (tty) stdout.write("\x1b[2J\x1b[H");
+    if (tty) stdout.write("\x1b[H\x1b[2J");
     stdout.write(frame);
   };
 
@@ -300,7 +323,7 @@ export async function runLiveTop({
 
   stdin.setRawMode(true);
   if (stdin.isPaused?.()) stdin.resume();
-  stdout.write("\x1b[?25l");
+  stdout.write("\x1b[?1049h\x1b[?25l");
 
   return await new Promise((resolve) => {
     let seq = "";
@@ -323,7 +346,7 @@ export async function runLiveTop({
       } catch {
         /* ignore */
       }
-      stdout.write("\x1b[?25h\n");
+      stdout.write("\x1b[?25h\x1b[?1049l");
       resolve({ mode: "live", exit: code });
     };
     const onData = (chunk) => {
