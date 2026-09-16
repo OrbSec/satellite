@@ -15,7 +15,7 @@ import {
 import { t } from "./sat-i18n.mjs";
 import { incompleteEscape, parseMenuKey } from "./cli-menu.mjs";
 
-const SPARK = " .:-=+*#";
+const SPARK = " .-=#";
 export const TOP_HISTORY = 90;
 
 function dim(s) {
@@ -73,19 +73,19 @@ export function bar(pct, width = 10) {
   const w = Math.max(4, Math.floor(Number(width) || 0));
   const n = Math.max(0, Math.min(100, Number(pct) || 0));
   const filled = Math.round((n / 100) * w);
-  return "#".repeat(filled) + ".".repeat(Math.max(0, w - filled));
+  return "#".repeat(filled) + " ".repeat(Math.max(0, w - filled));
 }
 
 export function sparkline(values, width) {
   const w = Math.max(2, Math.min(120, Math.floor(Number(width) || 0)));
   const nums = (values || []).map(Number).filter((n) => Number.isFinite(n));
-  if (!nums.length) return ".".repeat(w);
+  if (!nums.length) return " ".repeat(w);
   const slice = nums.length > w ? nums.slice(nums.length - w) : nums;
   const min = Math.min(...slice);
   const max = Math.max(...slice);
   const span = max - min || 1;
   const chars = slice.map((v) => SPARK[Math.min(SPARK.length - 1, Math.max(0, Math.round(((v - min) / span) * (SPARK.length - 1))))]);
-  return ".".repeat(Math.max(0, w - chars.length)) + chars.join("");
+  return chars.join("") + " ".repeat(Math.max(0, w - chars.length));
 }
 
 export function pushTopSample(history, pulse, { cap = TOP_HISTORY } = {}) {
@@ -160,11 +160,11 @@ export function topIntervalSec(raw) {
 }
 
 function meterLine(label, value, pct, spark, cols) {
-  const left = `${label} ${value}  `;
+  const sparkW = 16;
+  const left = `${label} ${value} ${dim("[")}${sparkline(spark, sparkW)}${dim("]")} `;
   const budget = Math.max(20, cols);
-  const sparkW = Math.min(24, Math.max(8, Math.floor(budget * 0.18)));
-  const barW = Math.max(8, budget - visLen(left) - sparkW - 2);
-  return clipLine(`${left}${bar(pct, barW)} ${sparkline(spark, sparkW)}`, budget);
+  const barW = Math.max(8, budget - visLen(left));
+  return clipLine(`${left}${bar(pct, barW)}`, budget);
 }
 
 function postureLine(pulse, lang, grade) {
