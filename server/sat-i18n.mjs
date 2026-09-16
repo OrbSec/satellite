@@ -198,7 +198,7 @@ const STR = {
 
 top: live perimeter (no login). Session graphs in RAM only. History/alerts/street — paid plan.
 Login asks language (saved), then daemon and logs (default no).
-Install asks daemon (default yes), logs (default no), then access for fail2ban / Docker / journal when present.
+Install asks daemon (default yes), logs (default no), then access for fail2ban / Docker / journal when present — including the first install, before login. Login reuses those answers.
 Docker group = root on the host. --npm skips the GitHub checksum (weaker).
 --daemon / --logs / --fail2ban / --docker / --journal / --access skip those questions.
 Key: {file}

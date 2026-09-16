@@ -297,6 +297,48 @@ function applyGrants(device, extra = {}) {
   return grants;
 }
 
+function rememberPendingGrants(choices) {
+  saveCli({
+    ...loadCli(),
+    pendingGrants: {
+      daemon: Boolean(choices.daemon),
+      logs: Boolean(choices.logs),
+      fail2ban: Boolean(choices.access?.fail2ban),
+      docker: Boolean(choices.access?.docker),
+      journal: Boolean(choices.access?.journal),
+      at: Date.now(),
+    },
+  });
+}
+
+function consumePendingGrants() {
+  const cli = loadCli();
+  const pending = cli.pendingGrants;
+  if (!pending || typeof pending !== "object") return null;
+  const next = { ...cli };
+  delete next.pendingGrants;
+  saveCli(next);
+  return pending;
+}
+
+async function resolveInstallChoices(opts, { skipAsk = false, device = null } = {}) {
+  if (skipAsk) {
+    return {
+      daemon: opts.daemon != null ? Boolean(opts.daemon) : Boolean(device?.grants?.daemon),
+      logs: opts.logs != null ? Boolean(opts.logs) : Boolean(device?.grants?.logs),
+      access: normalizeAccess({
+        fail2ban: opts.fail2ban != null ? opts.fail2ban : device?.grants?.fail2ban,
+        docker: opts.docker != null ? opts.docker : device?.grants?.docker,
+        journal: opts.journal != null ? opts.journal : device?.grants?.journal,
+      }),
+    };
+  }
+  const daemon = await wantDaemon(opts, { ifYes: true, index: 1 });
+  const logs = await wantLogs(opts);
+  const { access } = await wantAccess(opts, { logs });
+  return { daemon, logs, access };
+}
+
 async function sendPulse(device, { preview = true } = {}) {
   const pulse = collectPulse({ grants: device.grants });
   const ver = readCliVersion(SCRIPT);
@@ -448,9 +490,12 @@ async function cmdLogin(opts) {
   console.log(`\n\n✅  ${t(lang, "paired", { host: device.host, name: device.name })}`);
   console.log(dim(`🔑  ${t(lang, "key_file", { file: DEVICE_FILE })}\n`));
 
-  const daemon = await wantDaemon(opts);
-  const logs = await wantLogs(opts);
-  const grants = applyGrants(device, { daemon, logs });
+  const pending = consumePendingGrants();
+  const daemon =
+    pending && typeof pending.daemon === "boolean" && !opts.daemon ? Boolean(pending.daemon) : await wantDaemon(opts);
+  const logs = pending && typeof pending.logs === "boolean" && !opts.logs ? Boolean(pending.logs) : await wantLogs(opts);
+  const access = normalizeAccess(pending || {});
+  const grants = applyGrants(device, { daemon, logs, ...access });
   persistDevice(device, [SYSTEM_DEVICE]);
   printGrants(grants);
   if (logs) console.log(dim(t(lang, "logs_on")));
@@ -463,8 +508,8 @@ async function cmdLogin(opts) {
   }
   console.log("\n📡  " + t(lang, "pulse_ok"));
   printAdvice(out.body?.notes);
-  if (daemon) {
-    const installed = await cmdInstall({ ...opts, daemon: true, logs }, { enable: true, skipAsk: true });
+  if (daemon || access.fail2ban || access.docker || access.journal) {
+    const installed = await cmdInstall({ ...opts, daemon, logs, ...access }, { enable: true, skipAsk: true });
     if (installed) console.log("\n" + t(lang, "login_done"));
   } else {
     console.log(dim("\n" + t(lang, "daemon_skip")));
@@ -701,30 +746,20 @@ async function cmdInstall(opts, { enable = false, skipAsk = false } = {}) {
     console.error("⚠️  " + t(lang, "cli_link_fail", { err: e.message ? `: ${String(e.message).slice(0, 160)}` : "" }));
   }
   const rec = loadDeviceRecord();
+  const { daemon, logs, access } = await resolveInstallChoices(opts, { skipAsk, device: stripDevicePath(rec) });
   if (!rec?.secret) {
+    rememberPendingGrants({ daemon, logs, access });
+    const grants = applyGrants({ grants: {} }, { daemon, logs, ...access });
+    printGrants(grants);
+    if (logs) console.log(dim(t(lang, "logs_on")));
+    else console.log(dim(t(lang, "logs_skip")));
+    if (!daemon) console.log(dim(t(lang, "daemon_skip")));
     console.log("⚠️  " + t(lang, "need_login"));
     process.exit(placed ? 0 : 1);
   }
   const srcPath = rec.path || DEVICE_FILE;
   const device = stripDevicePath(rec);
   if (opts.url) device.api = String(opts.url).replace(/\/$/, "");
-  let daemon;
-  let logs;
-  let access;
-  if (skipAsk) {
-    daemon = opts.daemon != null ? Boolean(opts.daemon) : Boolean(device.grants?.daemon);
-    logs = opts.logs != null ? Boolean(opts.logs) : Boolean(device.grants?.logs);
-    access = normalizeAccess({
-      fail2ban: opts.fail2ban != null ? opts.fail2ban : device.grants?.fail2ban,
-      docker: opts.docker != null ? opts.docker : device.grants?.docker,
-      journal: opts.journal != null ? opts.journal : device.grants?.journal,
-    });
-  } else {
-    daemon = await wantDaemon(opts, { ifYes: true, index: 1 });
-    logs = await wantLogs(opts);
-    const got = await wantAccess(opts, { logs });
-    access = got.access;
-  }
   const grants = applyGrants(device, { daemon, logs, ...access });
   persistDevice(device, [srcPath, SYSTEM_DEVICE]);
   printGrants(grants);
