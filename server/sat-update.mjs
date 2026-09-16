@@ -199,10 +199,10 @@ export function verifySha256(buf, hex) {
 
 export function pickReleaseTarballName(sums, version, assetNames = []) {
   const ver = String(version || "").replace(/^v/, "");
-  const names = [...(sums instanceof Map ? sums.keys() : []), ...assetNames].map((n) => path.basename(String(n)));
+  const hashed = [...(sums instanceof Map ? sums.keys() : [])].map((n) => path.basename(String(n)));
   const want = [`cli-${ver}.tgz`, `orb44-cli-${ver}.tgz`, `@orb44-cli-${ver}.tgz`];
-  for (const n of want) if (names.includes(n)) return n;
-  return names.find((n) => /\.tgz$/.test(n) || /\.tar\.gz$/.test(n)) || null;
+  for (const n of want) if (hashed.includes(n)) return n;
+  return hashed.find((n) => /\.tgz$/.test(n) || /\.tar\.gz$/.test(n)) || null;
 }
 
 export async function fetchGithubReleaseMeta(fetchFn = fetch) {
