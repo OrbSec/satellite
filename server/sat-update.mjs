@@ -15,6 +15,7 @@ export const SAT_TREE_FILES = [
   "server/sat-logs.mjs",
   "server/sat-access.mjs",
   "server/sat-top.mjs",
+  "server/sat-backup.mjs",
   "web/inside-notes.js",
   "package.json",
 ];

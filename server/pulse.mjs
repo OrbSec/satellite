@@ -6,7 +6,7 @@ import { t } from "./sat-i18n.mjs";
 import { insideNote } from "../web/inside-notes.js";
 import { collectRuntime, sanitizeErrors, sanitizeGrants, sanitizeRuntime, isSatLogNoise } from "./sat-logs.mjs";
 import { probeDockerSocket, unexpectedDockerGroup } from "./sat-access.mjs";
-import { parseBackupHints } from "./smb-surface.mjs";
+import { parseBackupHints } from "./sat-backup.mjs";
 
 const COMM_RE = /[^a-zA-Z0-9._+-]/g;
 
