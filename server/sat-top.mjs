@@ -118,7 +118,8 @@ function memPct(pulse) {
 export function termSize(stdout = process.stdout) {
   const rawCols = Number(stdout?.columns) || 80;
   const rawRows = Number(stdout?.rows) || 24;
-  const cols = Math.max(60, Math.min(240, rawCols - 1));
+  // Never paint into the last column: autowrap there scrolls the header off.
+  const cols = Math.max(60, Math.min(240, Math.max(1, rawCols - 1)));
   const rows = Math.max(16, Math.min(80, rawRows));
   return { cols, rows };
 }
@@ -160,15 +161,20 @@ export function topIntervalSec(raw) {
 
 function meterLine(label, value, pct, spark, cols) {
   const left = `${label} ${value}  `;
-  const sparkW = Math.min(28, Math.max(8, Math.floor(cols * 0.22)));
-  const barW = Math.max(8, cols - visLen(left) - sparkW - 1);
-  return `${left}${bar(pct, barW)} ${sparkline(spark, sparkW)}`;
+  const budget = Math.max(20, cols);
+  const sparkW = Math.min(24, Math.max(8, Math.floor(budget * 0.18)));
+  const barW = Math.max(8, budget - visLen(left) - sparkW - 2);
+  return clipLine(`${left}${bar(pct, barW)} ${sparkline(spark, sparkW)}`, budget);
 }
 
-function postureLine(pulse, lang) {
+function postureLine(pulse, lang, grade) {
   const h = pulse?.hardening || {};
   const apps = pulse?.apps || {};
-  const bits = [`${t(lang, "preview_row_fw")} ${h.firewall || t(lang, "preview_fw_no")}`, h.fail2ban || t(lang, "preview_ban_no")];
+  const bits = [
+    `${t(lang, "top_grade")} ${grade || "—"}`,
+    `${t(lang, "preview_row_fw")} ${h.firewall || t(lang, "preview_fw_no")}`,
+    h.fail2ban || t(lang, "preview_ban_no"),
+  ];
   if (pulse?.limited) bits.push(t(lang, "preview_limited"));
   if (h.dockerSockWorld) bits.push(`docker.sock ${h.dockerSockMode || "open"}`);
   if (h.dockerPrivileged) bits.push("privileged ctr");
@@ -258,13 +264,19 @@ export function formatTopScreen(pulse, lang = "en", opts = {}) {
   const ram = `${gb(pulse?.memUsed)}/${gb(pulse?.memTotal)}G`;
   const disk = pulse?.diskUsedPct != null ? `${pulse.diskUsedPct}%` : "—";
   const hist = history || { load: [], ram: [], disk: [] };
-  const head = `${bold(t(lang, "top_title"))}  ${host}  ${t(lang, "top_grade")} ${gradePaint(grade)}  ${dim(clock)}  ${dim(t(lang, "top_refresh", { sec: intervalSec }))}${version ? dim(`  ${version}`) : ""}`;
+  const headLeft = `${bold(t(lang, "top_title"))}  ${t(lang, "top_grade")} ${gradePaint(grade)}  ${host}`;
+  const headRight = dim([clock, t(lang, "top_refresh", { sec: intervalSec }), version || ""].filter(Boolean).join("  "));
+  const headGap = Math.max(1, cols - visLen(headLeft) - visLen(headRight));
+  const head =
+    visLen(headLeft) + 1 + visLen(headRight) <= cols
+      ? `${headLeft}${" ".repeat(headGap)}${headRight}`
+      : clipLine(`${headLeft}  ${headRight}`, cols);
   const lines = [
     head,
     meterLine(t(lang, "top_load"), loadTxt, Math.min(100, Number(pulse?.load1) * 25), hist.load, cols),
     meterLine(t(lang, "top_ram"), ram, memPct(pulse), hist.ram, cols),
     meterLine(t(lang, "top_disk"), disk, Number(pulse?.diskUsedPct) || 0, hist.disk, cols),
-    postureLine(pulse, lang),
+    postureLine(pulse, lang, grade),
     "",
   ];
   const footer = [dim(t(lang, "top_footer")), dim(t(lang, "top_keys"))];
@@ -312,8 +324,18 @@ export async function runLiveTop({
     pushTopSample(history, pulse);
     const { cols, rows } = termSize(stdout);
     const frame = formatTopScreen(pulse, lang, { intervalSec: sec, version, cols, rows, history });
-    if (tty) stdout.write("\x1b[H\x1b[2J");
-    stdout.write(frame);
+    if (!tty) {
+      stdout.write(frame);
+      return;
+    }
+    const lines = frame.replace(/\n$/, "").split("\n").slice(0, rows);
+    let out = "\x1b[H";
+    for (let i = 0; i < lines.length; i++) {
+      out += clipLine(lines[i], cols) + "\x1b[K";
+      if (i < lines.length - 1) out += "\n";
+    }
+    out += "\x1b[J";
+    stdout.write(out);
   };
 
   if (once || !tty) {
