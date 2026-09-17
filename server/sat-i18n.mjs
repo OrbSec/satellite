@@ -183,7 +183,7 @@ const STR = {
     top_keys: "q quit · Ctrl+C",
     help: `Orb44 satellite {version} — admin device.
 
-  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|es]
+  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es]
   orb44 top [--interval 2] [--once] [--lang en|es]
   orb44 pulse
   orb44 daemon [--interval 300]
@@ -197,6 +197,7 @@ const STR = {
   orb44 logout
 
 top: live perimeter (no login). Session graphs in RAM only. History/alerts/street — paid plan.
+Login default {url}. Another host: --url or ORB44_API.
 Login asks language (saved), then daemon and logs (default no).
 Install asks daemon (default yes), logs (default no), then access for fail2ban / Docker / journal when present — including the first install, before login. Login reuses those answers.
 Docker group = root on the host. --npm skips the GitHub checksum (weaker).
@@ -362,7 +363,7 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     top_keys: "q выход · Ctrl+C",
     help: `Orb44 сателлит {version} — устройство админа.
 
-  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|es]
+  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es]
   orb44 top [--interval 2] [--once] [--lang en|es]
   orb44 pulse
   orb44 daemon [--interval 300]
@@ -375,6 +376,7 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
   orb44 logout
 
 top: живой экран на этой машине (без login). История, алерты, дельта с улицы — paid plan.
+Кабинет по умолчанию: {url}. Другой хост: --url или ORB44_API.
 После login спрашивает язык (запоминает), затем демон и логи — по умолчанию нет.
 install: демон (да), логи (нет), затем доступ к fail2ban / Docker / journal если они есть.
 --daemon / --logs / --fail2ban / --docker / --journal / --access пропускают вопросы.
@@ -539,7 +541,7 @@ install: демон (да), логи (нет), затем доступ к fail2b
     top_keys: "q 종료 · Ctrl+C",
     help: `Orb44 위성 {version} — 관리자 장치.
 
-  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|es]
+  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es]
   orb44 top [--interval 2] [--once] [--lang en|es]
   orb44 pulse
   orb44 daemon [--interval 300]
@@ -552,6 +554,7 @@ install: демон (да), логи (нет), затем доступ к fail2b
   orb44 logout
 
 top: 이 박스의 live 화면 (login 불필요). 기록·알림·거리 델타 — paid plan.
+기본 대시보드: {url}. 다른 호스트: --url 또는 ORB44_API.
 login에서 언어를 묻고 저장한 뒤, 데몬과 로그는 기본값 아니오입니다.
 install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal 접근.
 --daemon / --logs / --fail2ban / --docker / --journal / --access는 질문을 건너뜁니다.
@@ -722,7 +725,7 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     top_keys: "q salir · Ctrl+C",
     help: `Satélite Orb44 {version} — dispositivo de admin.
 
-  orb44 login [--url http://127.0.0.1:8787] [--daemon] [--logs] [--force] [--lang en|es]
+  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es]
   orb44 top [--interval 2] [--once] [--lang en|es]
   orb44 pulse
   orb44 daemon [--interval 300]
@@ -736,6 +739,7 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
   orb44 logout
 
 top: vista live (sin login). Gráficos de sesión en RAM. Historial/alertas/calle — paid plan.
+Panel por defecto: {url}. Otro host: --url o ORB44_API.
 Login pregunta idioma (lo guarda), luego demonio y logs (por defecto no).
 install: demonio (sí), logs (no), luego acceso fail2ban / Docker / journal si están.
 Grupo docker = root en el host. --npm omite el checksum de GitHub (más débil).

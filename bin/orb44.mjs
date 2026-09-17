@@ -11,7 +11,7 @@ import { localizeInsideNote } from "../web/inside-notes.js";
 import { pickFromList } from "../server/cli-menu.mjs";
 import { SYSTEM_DEVICE, SYSTEM_LIB, parseDeviceJson, hasExistingInstall, pickLiveDevice, deviceSearchPaths, loadFirstDevice, stripDevicePath, cliLinkPath, satLibRoot, writeCliShim, pathHasDir } from "../server/sat-local.mjs";
 import { CLI_PACKAGE, cmpVer, readCliVersion, pickSatRoots, staleSatRoots, applyUpdateTree, fetchLatestMeta, resolveUpdateSource, unpackTarball } from "../server/sat-update.mjs";
-import { cabinetRequest, apiFailText } from "../server/sat-http.mjs";
+import { cabinetRequest, apiFailText, resolveCabinetUrl } from "../server/sat-http.mjs";
 import {
   probeAccessTargets,
   normalizeAccess,
@@ -416,7 +416,7 @@ async function revokeLocalDevices(devices, fallbackApi) {
 }
 
 async function cmdLogin(opts) {
-  const url = String(opts.url || process.env.ORB44_API || "http://127.0.0.1:8787").replace(/\/$/, "");
+  const url = resolveCabinetUrl(opts.url);
   process.stdout.write(`orb44 login → ${url}\n`);
   await ensureLang(opts);
   banner();
@@ -1073,7 +1073,7 @@ async function cmdLang(flags) {
 
 function help() {
   applyLang(opts);
-  console.log(t(lang, "help", { file: DEVICE_FILE, version: localCliVersion() }));
+  console.log(t(lang, "help", { file: DEVICE_FILE, version: localCliVersion(), url: resolveCabinetUrl(opts.url) }));
 }
 
 const opts = args();

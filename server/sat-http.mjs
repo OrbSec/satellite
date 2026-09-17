@@ -1,4 +1,9 @@
 export const FETCH_MS = 15_000;
+export const DEFAULT_CABINET_URL = "https://app.orb44.com";
+
+export function resolveCabinetUrl(raw, env = process.env) {
+  return String(raw || env.ORB44_API || DEFAULT_CABINET_URL).replace(/\/$/, "");
+}
 
 const NET_CODES = new Set([
   "ECONNREFUSED",
