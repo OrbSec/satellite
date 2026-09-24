@@ -1,14 +1,14 @@
-export const LANGS = ["en", "es"];
-export const LANG_LABEL = { en: "English", es: "Español" };
+export const LANGS = ["en", "es", "ru", "ko"];
+export const LANG_LABEL = { en: "English", es: "Español", ru: "Русский", ko: "한국어" };
 
 export function normalizeLang(raw) {
   const s = String(raw || "")
     .trim()
     .toLowerCase()
     .replace(/_/g, "-");
-  if (s === "kr" || s.startsWith("ko")) return "en";
+  if (s === "kr" || s.startsWith("ko")) return "ko";
   if (s === "espanol" || s === "español" || s.startsWith("es")) return "es";
-  if (s === "russian" || s.startsWith("ru")) return "en";
+  if (s === "russian" || s.startsWith("ru")) return "ru";
   if (s.startsWith("en")) return "en";
   if (LANGS.includes(s)) return s;
   return null;
@@ -24,7 +24,9 @@ const STR = {
     banner_sub: "Inside analysis of this host: load, listeners, hardening.",
     lang_pick: "Language  ·  Idioma",
     lang_saved: "Language saved: {label}",
-    lang_now: "CLI language: {label}  (--lang en|es)",
+    lang_now: "CLI language: {label}  (--lang en|es|ru|ko)",
+    login_api: "API {url}",
+    daemon_tick: "{time} ok  load {load}  {grade}",
     open_link: "Open this link in the browser where Orb44 is already signed in:",
     code: "code {code}",
     waiting: "Waiting for dashboard confirmation…",
@@ -183,13 +185,13 @@ const STR = {
     top_keys: "q quit · Ctrl+C",
     help: `Orb44 satellite {version} — admin device.
 
-  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es]
-  orb44 top [--interval 2] [--once] [--lang en|es]
+  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es|ru|ko]
+  orb44 top [--interval 2] [--once] [--lang en|es|ru|ko]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
-  orb44 lang [en|es]
+  orb44 lang [en|es|ru|ko]
   orb44 status
   orb44 version
   orb44 update [--force] [--npm]
@@ -210,7 +212,9 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     banner_sub: "Анализ хоста изнутри: нагрузка, слушатели, hardening.",
     lang_pick: "Language  ·  Язык  ·  언어  ·  Idioma",
     lang_saved: "Язык сохранён: {label}",
-    lang_now: "Язык консоли: {label}  (--lang en|es)",
+    lang_now: "Язык консоли: {label}  (--lang en|es|ru|ko)",
+    login_api: "API {url}",
+    daemon_tick: "{time} ок  load {load}  {grade}",
     open_link: "Открой ссылку в браузере, где уже открыт Orb44:",
     code: "код {code}",
     waiting: "Жду подтверждения в кабинете…",
@@ -309,6 +313,12 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     update_fail: "Обновление не вышло{err}",
     update_npx: "Не вызывайте голый npx @orb44/cli — pin: npx @orb44/cli@{version}",
     update_restarted: "Демон orb44-satellite перезапущен.",
+    update_via: "Доверие: {source}",
+    update_unsigned: "Нет GitHub SHA256SUMS для этого обновления{err}",
+    update_npm_hint: "Аварийно (корень доверия — npm-аккаунт): orb44 update --npm",
+    update_npm_weak: "npm dist.integrity — не подпись. Лучше checksum релиза GitHub OrbSec/satellite.",
+    rotate_ok: "Ключ устройства обновлён. Старый секрет больше не работает.",
+    rotate_fail: "Не удалось обновить ключ устройства",
     advice_title: "Что сделать на этой машине",
     advice_sub: "Кабинет это не выполнит — иначе утечка ключа была бы удалённым шеллом.",
     preview_host: "хост {h}",
@@ -363,16 +373,17 @@ Outgoing pulse. The dashboard does not execute commands; it replies with advice.
     top_keys: "q выход · Ctrl+C",
     help: `Orb44 сателлит {version} — устройство админа.
 
-  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es]
-  orb44 top [--interval 2] [--once] [--lang en|es]
+  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es|ru|ko]
+  orb44 top [--interval 2] [--once] [--lang en|es|ru|ko]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
-  orb44 lang [en|es]
+  orb44 lang [en|es|ru|ko]
   orb44 status
   orb44 version
-  orb44 update
+  orb44 update [--force] [--npm]
+  orb44 rotate
   orb44 logout
 
 top: живой экран на этой машине (без login). История, алерты, дельта с улицы — paid plan.
@@ -388,7 +399,9 @@ install: демон (да), логи (нет), затем доступ к fail2b
     banner_sub: "이 호스트를 안에서 분석합니다: 부하, 리스너, hardening.",
     lang_pick: "Language  ·  Язык  ·  언어  ·  Idioma",
     lang_saved: "언어 저장됨: {label}",
-    lang_now: "CLI 언어: {label}  (--lang en|es)",
+    lang_now: "CLI 언어: {label}  (--lang en|es|ru|ko)",
+    login_api: "API {url}",
+    daemon_tick: "{time} ok  load {load}  {grade}",
     open_link: "이미 Orb44에 로그인한 브라우저에서 이 링크를 여세요:",
     code: "코드 {code}",
     waiting: "대시보드 확인을 기다리는 중…",
@@ -450,9 +463,9 @@ install: демон (да), логи (нет), затем доступ к fail2b
     daemon_run: "데몬 {sec}초마다 · {host}",
     daemon_revoked: "키 취소됨",
     unit_written: "unit {path}",
-    cli_link: "command installed: {path}",
-    cli_link_fail: "could not install the orb44 command{err}",
-    cli_path_hint: "{dir} is not on PATH. Add it, then: hash -r",
+    cli_link: "명령 설치됨: {path}",
+    cli_link_fail: "orb44 명령을 설치하지 못했습니다{err}",
+    cli_path_hint: "{dir}가 PATH에 없습니다. 추가한 뒤: hash -r",
     daemon_on: "데몬이 켜졌습니다: 백그라운드 펄스, 재부팅 후에도 올라옵니다.",
     login_done: "끝났습니다. 이 세션을 닫아도 됩니다 — 데몬은 이미 백그라운드에 있습니다.",
     daemon_user: "서비스 사용자 {user} · 키 {file}",
@@ -487,6 +500,12 @@ install: демон (да), логи (нет), затем доступ к fail2b
     update_fail: "업데이트 실패{err}",
     update_npx: "버전 없는 npx @orb44/cli 는 쓰지 마세요 — pin: npx @orb44/cli@{version}",
     update_restarted: "orb44-satellite 를 재시작했습니다.",
+    update_via: "신뢰: {source}",
+    update_unsigned: "이 업데이트의 GitHub SHA256SUMS가 없습니다{err}",
+    update_npm_hint: "비상 (신뢰 루트가 npm 계정): orb44 update --npm",
+    update_npm_weak: "npm dist.integrity는 서명이 아닙니다. OrbSec/satellite GitHub 릴리스 체크섬을 쓰세요.",
+    rotate_ok: "기기 키를 교체했습니다. 이전 시크릿은 더 이상 통하지 않습니다.",
+    rotate_fail: "기기 키를 교체하지 못했습니다",
     advice_title: "이 기기에서 할 일",
     advice_sub: "대시보드은 실행하지 않습니다. 키 유출이 원격 셸이 되면 안 됩니다.",
     preview_host: "호스트 {h}",
@@ -541,16 +560,17 @@ install: демон (да), логи (нет), затем доступ к fail2b
     top_keys: "q 종료 · Ctrl+C",
     help: `Orb44 위성 {version} — 관리자 장치.
 
-  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es]
-  orb44 top [--interval 2] [--once] [--lang en|es]
+  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es|ru|ko]
+  orb44 top [--interval 2] [--once] [--lang en|es|ru|ko]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
-  orb44 lang [en|es]
+  orb44 lang [en|es|ru|ko]
   orb44 status
   orb44 version
-  orb44 update
+  orb44 update [--force] [--npm]
+  orb44 rotate
   orb44 logout
 
 top: 이 박스의 live 화면 (login 불필요). 기록·알림·거리 델타 — paid plan.
@@ -566,7 +586,9 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     banner_sub: "Análisis del host desde dentro: carga, listeners, hardening.",
     lang_pick: "Language  ·  Язык  ·  언어  ·  Idioma",
     lang_saved: "Idioma guardado: {label}",
-    lang_now: "Idioma de la consola: {label}  (--lang en|es)",
+    lang_now: "Idioma de la consola: {label}  (--lang en|es|ru|ko)",
+    login_api: "API {url}",
+    daemon_tick: "{time} ok  load {load}  {grade}",
     open_link: "Abra este enlace en el navegador donde ya está Orb44:",
     code: "código {code}",
     waiting: "Esperando confirmación en el panel…",
@@ -725,13 +747,13 @@ install: 데몬(예), 로그(아니오), 있으면 fail2ban / Docker / journal �
     top_keys: "q salir · Ctrl+C",
     help: `Satélite Orb44 {version} — dispositivo de admin.
 
-  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es]
-  orb44 top [--interval 2] [--once] [--lang en|es]
+  orb44 login [--url {url}] [--daemon] [--logs] [--force] [--lang en|es|ru|ko]
+  orb44 top [--interval 2] [--once] [--lang en|es|ru|ko]
   orb44 pulse
   orb44 daemon [--interval 300]
   orb44 install [--system] [--daemon] [--logs] [--fail2ban] [--docker] [--journal] [--access] [--interval 300]
   orb44 uninstall [--purge]
-  orb44 lang [en|es]
+  orb44 lang [en|es|ru|ko]
   orb44 status
   orb44 version
   orb44 update [--force] [--npm]

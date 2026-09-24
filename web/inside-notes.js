@@ -36,6 +36,16 @@ export const INSIDE_NOTES = {
       text: "On the machine {machine}, from outside A={street}. Another box or a grey shield.",
       do: "Check that DNS A points at the VPS where you installed the satellite. If the site is behind Cloudflare, that is expected — not an incident.",
     },
+    "runtime-eol": {
+      title: "Software on the box is past security support",
+      text: "The satellite read versions, not configs: {list}. eol means the date has passed. ending means less than half a year is left.",
+      do: "Upgrade PHP, the OS, Node, or OpenSSL on the VPS. Orb44 does not change packages.",
+    },
+    "updates-pending": {
+      title: "Security packages are waiting on the server",
+      text: "The satellite counted {n} security updates still waiting. It did not read package names or configs, and it did not install anything.",
+      do: "Apply the security updates on the VPS. Orb44 does not change packages.",
+    },
     "load-street": {
       title: "Load and an open login",
       text: "The machine is under load and login is open from outside — looks like they are hitting login. Top: {who}.",
@@ -128,6 +138,21 @@ export const INSIDE_NOTES = {
       title: "Disk is almost full",
       text: "Root is {pct}% full. Logs and updates will fail before the storefront does.",
       do: "Clean logs and unused Docker images. Orb44 does not delete files.",
+    },
+    "hardening-inodes": {
+      title: "The disk is out of file slots",
+      text: "Root inodes are {pct}% used. New files, logs, and TLS renewals fail even if bytes are free.",
+      do: "Clear tiny leftover files and unused Docker layers. Orb44 does not delete files.",
+    },
+    "tls-local": {
+      title: "A certificate on this machine expires soon",
+      text: "Let's Encrypt leaf on the box: {list}. Watch sees the street cert (often Cloudflare) — this is the origin one.",
+      do: "Renew or check certbot/acme. Orb44 does not run certbot.",
+    },
+    "docker-publish": {
+      title: "A container published extra ports to the street",
+      text: "{names} bind 0.0.0.0, not only 80/443. That is how Prometheus or a panel appears outside compose.",
+      do: "In compose publish 127.0.0.1:PORT:PORT or drop the mapping. Orb44 does not edit compose.",
     },
     "hardening-oom": {
       title: "The kernel killed processes for memory",
@@ -280,8 +305,8 @@ export const INSIDE_NOTES = {
       do: "This is a journal / docker / kubectl / nginx tail you allowed at login. Orb44 does not fix it.",
     },
     "pulse-stale": {
-      title: "Satellite is not answering",
-      text: "No pulse for {ageMin} min (threshold {thresholdMin} min). The daemon on the machine is silent or could not reach the dashboard.",
+      title: "The agent on the server went quiet",
+      text: "No pulse from the Orb44 agent for {ageMin} min. The website can still be open — this is not a downed storefront. On the VPS: systemctl status orb44-satellite.",
     },
   },
   ru: {
@@ -308,6 +333,16 @@ export const INSIDE_NOTES = {
       title: "Адрес машины не совпал со снимком",
       text: "На машине {machine}, снаружи A={street}. Другой ящик или серый щит.",
       do: "Сверьте DNS A с тем VPS, куда поставили сателлит. Если сайт за Cloudflare — это ожидаемо, не инцидент.",
+    },
+    "runtime-eol": {
+      title: "На ящике софт без обновлений безопасности",
+      text: "Сателлит прочитал версии, не конфиги: {list}. eol — срок уже прошёл. ending — до конца поддержки меньше полугода.",
+      do: "Обновите PHP, ОС, Node или OpenSSL на VPS. Orb44 пакеты сам не меняет.",
+    },
+    "updates-pending": {
+      title: "На ящике ждут security-пакеты",
+      text: "Сателлит насчитал {n} security-обновлений в очереди. Имена пакетов и конфиги не читал, ничего не ставил.",
+      do: "Поставьте security-обновления на VPS. Orb44 пакеты сам не меняет.",
     },
     "load-street": {
       title: "Нагрузка и открытый вход",
@@ -401,6 +436,21 @@ export const INSIDE_NOTES = {
       title: "Диск почти полный",
       text: "Корневой раздел занят на {pct}%. Логи и апдейты начнут падать раньше, чем витрина.",
       do: "Почистите логи и неиспользуемые образы Docker. Orb44 файлы сам не удаляет.",
+    },
+    "hardening-inodes": {
+      title: "На диске кончились слоты файлов",
+      text: "Inode корня заняты на {pct}%. Новые файлы, логи и обновление сертификатов падают, даже если байты ещё есть.",
+      do: "Почистите мелкие хвосты и неиспользуемые слои Docker. Orb44 файлы сам не удаляет.",
+    },
+    "tls-local": {
+      title: "Сертификат на этой машине скоро истечёт",
+      text: "Let's Encrypt на ящике: {list}. Watch видит уличный сертификат (часто Cloudflare) — это origin.",
+      do: "Обновите или проверьте certbot/acme. Orb44 certbot сам не запускает.",
+    },
+    "docker-publish": {
+      title: "Контейнер пробросил лишние порты на улицу",
+      text: "{names} слушают 0.0.0.0, не только 80/443. Так снаружи оказывается Prometheus или панель.",
+      do: "В compose опубликуйте 127.0.0.1:PORT:PORT или уберите проброс. Orb44 compose не правит.",
     },
     "hardening-oom": {
       title: "Ядро убивало процессы по памяти",
@@ -553,8 +603,8 @@ export const INSIDE_NOTES = {
       do: "Это хвост журнала / docker / kubectl / nginx, который вы разрешили при login. Orb44 ничего не чинит.",
     },
     "pulse-stale": {
-      title: "Сателлит не отвечает",
-      text: "Пульса нет {ageMin} мин (порог {thresholdMin} мин). Демон на машине молчит или не достучался до кабинета.",
+      title: "Агент на сервере молчит",
+      text: "Пульса от агента Orb44 нет {ageMin} мин. Сайт при этом может быть открыт — это не «витрина легла». На VPS: systemctl status orb44-satellite.",
     },
   },
   es: {
@@ -581,6 +631,16 @@ export const INSIDE_NOTES = {
       title: "La IP de la máquina no coincidió con el snapshot",
       text: "En la máquina {machine}, desde fuera A={street}. Otra caja o un escudo gris.",
       do: "Compruebe que el DNS A apunta al VPS donde instaló el satélite. Si el sitio está detrás de Cloudflare, es esperable — no es un incidente.",
+    },
+    "runtime-eol": {
+      title: "El software del servidor ya no tiene soporte de seguridad",
+      text: "El satélite leyó versiones, no configs: {list}. eol es que la fecha ya pasó. ending es que queda menos de medio año.",
+      do: "Actualice PHP, el SO, Node u OpenSSL en el VPS. Orb44 no cambia paquetes.",
+    },
+    "updates-pending": {
+      title: "Hay paquetes de seguridad en espera",
+      text: "El satélite contó {n} actualizaciones de seguridad en espera. No leyó nombres ni configs, y no instaló nada.",
+      do: "Aplique las actualizaciones de seguridad en el VPS. Orb44 no cambia paquetes.",
     },
     "load-street": {
       title: "Carga y un login abierto",
@@ -674,6 +734,21 @@ export const INSIDE_NOTES = {
       title: "El disco está casi lleno",
       text: "La raíz está al {pct}%. Los logs y las actualizaciones fallarán antes que la tienda.",
       do: "Limpie logs e imágenes Docker sin uso. Orb44 no borra archivos.",
+    },
+    "hardening-inodes": {
+      title: "El disco se quedó sin inodos",
+      text: "Los inodos de raíz están al {pct}%. Fallan archivos nuevos aunque queden bytes.",
+      do: "Limpie restos pequeños y capas Docker. Orb44 no borra archivos.",
+    },
+    "tls-local": {
+      title: "Un certificado de esta máquina caduca pronto",
+      text: "Hoja Let's Encrypt en la caja: {list}. Watch ve el cert de la calle (a menudo Cloudflare) — este es el de origen.",
+      do: "Renueve o revise certbot/acme. Orb44 no ejecuta certbot.",
+    },
+    "docker-publish": {
+      title: "Un contenedor publicó puertos extra a la calle",
+      text: "{names} escuchan en 0.0.0.0, no solo 80/443. Así sale Prometheus o un panel fuera de compose.",
+      do: "En compose publique 127.0.0.1:PORT:PORT o quite el mapeo. Orb44 no edita compose.",
     },
     "hardening-oom": {
       title: "El kernel mató procesos por memoria",
@@ -826,8 +901,8 @@ export const INSIDE_NOTES = {
       do: "Es la cola de journal / docker / kubectl / nginx que permitió al hacer login. Orb44 no lo repara.",
     },
     "pulse-stale": {
-      title: "El satélite no responde",
-      text: "Sin pulso {ageMin} min (umbral {thresholdMin} min). El demonio en la máquina calla o no alcanzó el panel.",
+      title: "El agente del servidor calló",
+      text: "Sin pulso del agente Orb44 {ageMin} min. El sitio puede seguir abierto — no es que la tienda cayera. En el VPS: systemctl status orb44-satellite.",
     },
   },
   ko: {
@@ -854,6 +929,16 @@ export const INSIDE_NOTES = {
       title: "머신 주소가 스냅샷과 다릅니다",
       text: "머신에서는 {machine}, 밖에서는 A={street}. 다른 상자이거나 회색 방패입니다.",
       do: "위성을 심은 VPS와 DNS A가 맞는지 보세요. 사이트가 Cloudflare 뒤면 예상된 일입니다 — 사고가 아닙니다.",
+    },
+    "runtime-eol": {
+      title: "서버 소프트웨어가 보안 지원을 넘겼습니다",
+      text: "위성이 설정이 아니라 버전을 읽었습니다: {list}. eol은 날짜가 지났다는 뜻입니다. ending은 지원 종료까지 반년이 안 남았습니다.",
+      do: "VPS의 PHP, OS, Node, OpenSSL을 올리세요. Orb44는 패키지를 바꾸지 않습니다.",
+    },
+    "updates-pending": {
+      title: "서버에 보안 패키지가 대기 중입니다",
+      text: "위성이 대기 중인 보안 업데이트 {n}개를 셌습니다. 패키지 이름과 설정은 읽지 않았고 설치도 하지 않았습니다.",
+      do: "VPS에 보안 업데이트를 적용하세요. Orb44는 패키지를 바꾸지 않습니다.",
     },
     "load-street": {
       title: "부하와 열린 로그인",
@@ -947,6 +1032,21 @@ export const INSIDE_NOTES = {
       title: "디스크가 거의 가득 참",
       text: "루트가 {pct}% 찼습니다. 상점보다 로그와 업데이트가 먼저 죽습니다.",
       do: "로그와 안 쓰는 Docker 이미지를 지우세요. Orb44는 파일을 지우지 않습니다.",
+    },
+    "hardening-inodes": {
+      title: "디스크 파일 슬롯이 거의 찼음",
+      text: "루트 inode가 {pct}%입니다. 바이트가 남아도 새 파일·로그·인증서 갱신이 실패합니다.",
+      do: "작은 잔여 파일과 안 쓰는 Docker 레이어를 지우세요. Orb44는 파일을 지우지 않습니다.",
+    },
+    "tls-local": {
+      title: "이 머신의 인증서가 곧 만료됨",
+      text: "상자 Let's Encrypt: {list}. Watch는 거리 인증서(대개 Cloudflare)를 봅니다 — 이것은 origin입니다.",
+      do: "certbot/acme를 갱신하거나 확인하세요. Orb44는 certbot을 실행하지 않습니다.",
+    },
+    "docker-publish": {
+      title: "컨테이너가 추가 포트를 밖으로 열었음",
+      text: "{names}가 0.0.0.0에 붙습니다. 80/443만이 아닙니다. 이렇게 Prometheus나 패널이 밖에 보입니다.",
+      do: "compose에서 127.0.0.1:PORT:PORT로 올리거나 매핑을 빼세요. Orb44는 compose를 고치지 않습니다.",
     },
     "hardening-oom": {
       title: "커널이 메모리 때문에 프로세스를 죽였음",
@@ -1099,8 +1199,8 @@ export const INSIDE_NOTES = {
       do: "로그인 때 허용한 journal / docker / kubectl / nginx 꼬리입니다. Orb44는 고치지 않습니다.",
     },
     "pulse-stale": {
-      title: "위성이 응답하지 않음",
-      text: "{ageMin}분 동안 펄스 없음 (임계 {thresholdMin}분). 머신 데몬이 조용하거나 대시보드에 닿지 못했습니다.",
+      title: "서버 에이전트가 조용함",
+      text: "Orb44 에이전트 펄스가 {ageMin}분 없습니다. 사이트는 열려 있을 수 있습니다 — 가게가 다운된 게 아닙니다. VPS에서: systemctl status orb44-satellite.",
     },
   },
 };
@@ -1126,6 +1226,21 @@ function sshBits(lang, vars) {
   if (vars.sshRoot) bits.push(pack._ssh_root);
   if (vars.sshWorld) bits.push(pack._ssh_world);
   return bits.join(". ");
+}
+
+export const HYGIENE_INSIDE_IDS = new Set([
+  "hardening-min",
+  "hardening-fw",
+  "hardening-ban",
+  "hardening-timesync",
+  "hardening-lsm",
+  "hardening-reboot",
+  "hardening-disk",
+  "hardening-inodes",
+]);
+
+export function isHygieneInsideNote(n) {
+  return HYGIENE_INSIDE_IDS.has(n?.id);
 }
 
 function withWho(lang, vars) {

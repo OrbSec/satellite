@@ -1,12 +1,23 @@
 import os from "node:os";
 import fs from "node:fs";
+import path from "node:path";
 import net from "node:net";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { t } from "./sat-i18n.mjs";
 import { insideNote } from "../web/inside-notes.js";
 import { collectRuntime, sanitizeErrors, sanitizeGrants, sanitizeRuntime, isSatLogNoise } from "./sat-logs.mjs";
 import { probeDockerSocket, unexpectedDockerGroup } from "./sat-access.mjs";
 import { parseBackupHints } from "./sat-backup.mjs";
+import {
+  classifyRelease,
+  parseAptCheck,
+  parseDnfSecurityCount,
+  parseOpenSslMinor,
+  parseOsRelease,
+  parsePhpVersion,
+  sanitizeRelease,
+  sanitizeSecurityUpdates,
+} from "./runtime-eol.mjs";
 
 const COMM_RE = /[^a-zA-Z0-9._+-]/g;
 
@@ -57,6 +68,111 @@ function diskUsedPct(root = "/") {
   } catch {
     return null;
   }
+}
+
+export function diskInodePct(root = "/", stat = null) {
+  try {
+    const s = stat || (typeof fs.statfsSync === "function" ? fs.statfsSync(root) : null);
+    const total = Number(s?.files);
+    const free = Number(s?.ffree ?? s?.favail);
+    if (!total) return null;
+    return Math.max(0, Math.min(100, Math.round((1 - free / total) * 100)));
+  } catch {
+    return null;
+  }
+}
+
+const WEB_PUBLISH_PORTS = new Set([80, 443]);
+
+export function parseOpensslEnddate(text, now = Date.now()) {
+  const m = /notAfter=(.+)/i.exec(String(text || ""));
+  if (!m) return null;
+  const t = Date.parse(m[1]);
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((t - Number(now)) / 86400000);
+}
+
+export function parseDockerPublished(raw) {
+  let arr;
+  try {
+    const parsed = JSON.parse(String(raw || "[]"));
+    arr = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+  } catch {
+    return [];
+  }
+  const out = [];
+  const seen = new Set();
+  for (const c of arr.slice(0, 32)) {
+    const name = sanitizeComm(String(c?.Name || "").replace(/^\//, "")) || "container";
+    const binds = c?.HostConfig?.PortBindings || {};
+    for (const [spec, rows] of Object.entries(binds)) {
+      const port = Number(String(spec).split("/")[0]);
+      if (!Number.isFinite(port) || WEB_PUBLISH_PORTS.has(port)) continue;
+      for (const row of Array.isArray(rows) ? rows : []) {
+        const ip = String(row?.HostIp || "0.0.0.0");
+        if (ip && ip !== "0.0.0.0" && ip !== "::" && ip !== "*") continue;
+        const hostPort = Number(row?.HostPort || port);
+        const key = `${name}:${hostPort}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ name: name.slice(0, 40), port: hostPort });
+        if (out.length >= 8) return out;
+      }
+    }
+  }
+  return out;
+}
+
+function collectLocalCerts() {
+  const live = "/etc/letsencrypt/live";
+  let names = [];
+  try {
+    names = fs.readdirSync(live);
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const name of names.slice(0, 12)) {
+    if (name.startsWith(".")) continue;
+    const pem = path.join(live, name, "cert.pem");
+    try {
+      if (!fs.existsSync(pem)) continue;
+      const days = parseOpensslEnddate(run("openssl", ["x509", "-enddate", "-noout", "-in", pem]));
+      if (days == null) continue;
+      out.push({ name: String(name).slice(0, 80), daysLeft: days });
+    } catch {
+      /* unreadable leaf */
+    }
+  }
+  return out;
+}
+
+function sanitizeCerts(raw) {
+  const out = [];
+  for (const row of Array.isArray(raw) ? raw : []) {
+    const name = String(row?.name || "").replace(/[^a-zA-Z0-9._*-]/g, "").slice(0, 80);
+    const daysLeft = Math.round(Number(row?.daysLeft));
+    if (!name || !Number.isFinite(daysLeft)) continue;
+    out.push({ name, daysLeft: Math.max(-3650, Math.min(3650, daysLeft)) });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+function sanitizeDockerPublished(raw) {
+  const out = [];
+  const seen = new Set();
+  for (const row of Array.isArray(raw) ? raw : []) {
+    const name = sanitizeComm(row?.name) || "container";
+    const port = Number(row?.port);
+    if (!Number.isFinite(port) || port <= 0 || port > 65535 || WEB_PUBLISH_PORTS.has(port)) continue;
+    const key = `${name}:${port}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: name.slice(0, 40), port });
+    if (out.length >= 8) break;
+  }
+  return out;
 }
 
 export function publicIpv4(ip) {
@@ -116,9 +232,19 @@ export async function measureHostRtt(pulse, seenIp) {
   return hits[0];
 }
 
-export function originAddrs(ifaces = os.networkInterfaces()) {
+function listIfaces() {
+  try {
+    return os.networkInterfaces() || {};
+  } catch {
+    // libuv EAFNOSUPPORT (97) on broken IPv6 — do not abort the pulse
+    return {};
+  }
+}
+
+export function originAddrs(ifaces) {
+  const table = ifaces === undefined ? listIfaces() : ifaces;
   const out = [];
-  for (const rows of Object.values(ifaces || {})) {
+  for (const rows of Object.values(table || {})) {
     for (const r of rows || []) {
       const family = String(r.family);
       if (r.internal) continue;
@@ -352,6 +478,7 @@ export function sanitizePulse(raw = {}) {
     dockerEscape: sanitizeDockerEscape(raw.hardening?.dockerEscape),
     imageCves: sanitizeImageCves(raw.hardening?.imageCves),
     containerMiners: sanitizeContainerMiners(raw.hardening?.containerMiners),
+    dockerPublished: sanitizeDockerPublished(raw.hardening?.dockerPublished || raw.dockerPublished),
     oomKills: Math.max(0, Math.min(999, Number(raw.hardening?.oomKills) || 0)),
   };
   const limited = Boolean(raw.limited);
@@ -365,6 +492,8 @@ export function sanitizePulse(raw = {}) {
     memUsed: Math.max(0, Math.round(Number(raw.memUsed) || 0)),
     memTotal: Math.max(0, Math.round(Number(raw.memTotal) || 0)),
     diskUsedPct: raw.diskUsedPct == null ? null : Math.max(0, Math.min(100, Math.round(Number(raw.diskUsedPct)))),
+    diskInodePct: raw.diskInodePct == null ? null : Math.max(0, Math.min(100, Math.round(Number(raw.diskInodePct)))),
+    certs: sanitizeCerts(raw.certs),
     top,
     listen,
     originA,
@@ -376,6 +505,8 @@ export function sanitizePulse(raw = {}) {
     cliVersion,
     grants: sanitizeGrants(raw.grants),
     runtime: sanitizeRuntime(raw.runtime),
+    release: sanitizeRelease(raw.release),
+    securityUpdates: sanitizeSecurityUpdates(raw.securityUpdates),
     errors: sanitizeErrors(raw.errors),
     apps: sanitizeApps(raw.apps),
     backups: sanitizeBackups(raw.backups),
@@ -1085,6 +1216,7 @@ export function collectHardening(listen = []) {
         rssMb: Number(r.rssMb) || 0,
         image: String(r.image || "").slice(0, 80),
       })),
+    dockerPublished: dockerInspect.published || [],
     _docker: dockerInspect,
     oomKills,
   };
@@ -1431,7 +1563,7 @@ function collectDockerInspect() {
     .split(/\s+/)
     .filter((id) => /^[0-9a-f]{6,64}$/i.test(id))
     .slice(0, 24);
-  if (!ids.length) return { privileged: false, hostMount: false, names: [], images: [], miners: [], stats: [] };
+  if (!ids.length) return { privileged: false, hostMount: false, names: [], images: [], miners: [], stats: [], published: [] };
   const raw = runOut("docker", ["inspect", ...ids]);
   const escape = parseDockerInspectEscape(raw);
   const stats = parseDockerStats(runOut("docker", ["stats", "--no-stream", "--format", "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.PIDs}}"]));
@@ -1440,6 +1572,7 @@ function collectDockerInspect() {
     images: parseDockerInspectImages(raw),
     miners: parseDockerInspectMiners(raw),
     stats,
+    published: parseDockerPublished(raw),
   };
 }
 
@@ -1502,6 +1635,13 @@ export function compareInside(pulse, rec = {}, prev = null) {
   if (pulse?.originA?.length && streetIp && !pulse.originA.includes(streetIp)) {
     notes.push(insideNote("origin-mismatch", "origin-mismatch", { machine: pulse.originA.join(", "), street: streetIp }));
   }
+  const eol = classifyRelease(pulse?.release);
+  if (eol.length) {
+    const list = eol.map((i) => `${i.name} ${i.version} (${i.state})`).join(", ");
+    notes.push(insideNote("runtime-eol", "runtime-eol", { list }));
+  }
+  const pending = sanitizeSecurityUpdates(pulse?.securityUpdates);
+  if (pending > 0) notes.push(insideNote("updates-pending", "updates-pending", { n: String(pending) }));
   const loadHigh = Number(pulse?.load1) >= Math.max(2, cpuCount(pulse));
   const memHigh = pulse?.memTotal && pulse.memUsed / pulse.memTotal >= 0.85;
   const pr = pulse?.pressure || {};
@@ -1557,6 +1697,23 @@ export function compareInside(pulse, rec = {}, prev = null) {
     if (!h.timesync) notes.push(insideNote("hardening-timesync", "hardening"));
     if (h.apparmor === false && h.selinux === false) notes.push(insideNote("hardening-lsm", "hardening"));
     if (Number(pulse.diskUsedPct) >= 85) notes.push(insideNote("hardening-disk", "hardening", { pct: pulse.diskUsedPct }));
+    if (Number(pulse.diskInodePct) >= 85) notes.push(insideNote("hardening-inodes", "hardening", { pct: pulse.diskInodePct }));
+    const soon = (pulse.certs || []).filter((c) => Number(c.daysLeft) <= 21);
+    if (soon.length) {
+      notes.push(
+        insideNote("tls-local", "tls-local", {
+          list: soon.map((c) => `${c.name} ${c.daysLeft}d`).join(", "),
+        })
+      );
+    }
+    const published = h.dockerPublished || [];
+    if (published.length) {
+      notes.push(
+        insideNote("docker-publish", "docker-publish", {
+          names: published.map((r) => `${r.name} :${r.port}`).join(", "),
+        })
+      );
+    }
     if (pulse.oom || Number(h.oomKills) > 0) {
       notes.push(
         Number(h.oomKills) > 0
@@ -1873,6 +2030,60 @@ export function collectBackupHints() {
   return parseBackupHints({ timers, crontab, units: timers });
 }
 
+function readShort(bin, args) {
+  try {
+    return execFileSync(bin, args, {
+      encoding: "utf8",
+      timeout: 1200,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).slice(0, 240);
+  } catch {
+    return "";
+  }
+}
+
+function spawnText(bin, args) {
+  try {
+    const r = spawnSync(bin, args, { encoding: "utf8", timeout: 4000, stdio: ["ignore", "pipe", "pipe"] });
+    if (r.error) return null;
+    return `${r.stdout || ""}\n${r.stderr || ""}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Count of pending security packages. Cache only, no install, no package names. */
+export function collectSecurityUpdates() {
+  for (const bin of ["/usr/lib/update-notifier/apt-check", "/usr/lib/update-notifier/apt-check.py"]) {
+    if (!fs.existsSync(bin)) continue;
+    const n = parseAptCheck(spawnText(bin, []));
+    if (n != null) return n;
+  }
+  const bin = fs.existsSync("/usr/bin/dnf") ? "dnf" : fs.existsSync("/usr/bin/yum") ? "yum" : "";
+  if (!bin) return null;
+  const text = spawnText(bin, ["--cacheonly", "-q", "updateinfo", "list", "security"]);
+  if (text == null) return null;
+  return parseDnfSecurityCount(text);
+}
+
+/** OS / PHP / Node / OpenSSL versions. Does not open wp-config or .env. */
+export function collectHostRelease() {
+  let osText = "";
+  try {
+    osText = fs.readFileSync("/etc/os-release", "utf8");
+  } catch {
+    osText = "";
+  }
+  const osRel = parseOsRelease(osText);
+  return sanitizeRelease({
+    osId: osRel?.osId || "",
+    osVersion: osRel?.osVersion || "",
+    php: parsePhpVersion(readShort("php", ["-r", "echo PHP_VERSION;"])),
+    node: String(process.versions?.node || "").split(".")[0],
+    openssl: parseOpenSslMinor(readShort("openssl", ["version"])),
+  });
+}
+
 export function collectPulse(opts = {}) {
   const { memUsed, memTotal } = memInfo();
   const { listen, named } = listenTable();
@@ -1894,6 +2105,8 @@ export function collectPulse(opts = {}) {
     memUsed,
     memTotal,
     diskUsedPct: diskUsedPct("/"),
+    diskInodePct: diskInodePct("/"),
+    certs: collectLocalCerts(),
     top,
     listen,
     originA: originAddrs(),
@@ -1904,6 +2117,8 @@ export function collectPulse(opts = {}) {
     pressure,
     grants,
     runtime: extra.runtime,
+    release: collectHostRelease(),
+    securityUpdates: collectSecurityUpdates(),
     errors: extra.errors,
     apps,
     backups,

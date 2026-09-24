@@ -451,7 +451,7 @@ async function cmdLogin(opts) {
     console.error(failLine(begin, "pair_fail"));
     process.exit(1);
   }
-  console.log(`🔗  API ${url}`);
+  console.log(`🔗  ${t(lang, "login_api", { url })}`);
   console.log(`🌐  ${t(lang, "open_link")}\n`);
   console.log(`  ${bold(begin.body.verifyUrl)}`);
   console.log(dim(`  ${t(lang, "code", { code: begin.body.userCode })}\n`));
@@ -558,7 +558,7 @@ async function cmdDaemon(opts) {
         console.error(`⚠️  ${hh} ${apiFailText(lang, out, t)}`);
         return;
       }
-      console.log(`📡  ${hh} ok  load ${pulse.load1}  ${pulse.gradeInside || "—"}`);
+      console.log(`📡  ${t(lang, "daemon_tick", { time: hh, load: pulse.load1, grade: pulse.gradeInside || "—" })}`);
     } catch (e) {
       console.error(`⚠️  ${hh} ${String(e?.message || e).split("\n")[0].slice(0, 200)}`);
     }
@@ -1001,7 +1001,7 @@ async function cmdStatus() {
     console.log("⚠️  " + t(lang, "not_paired"));
     return;
   }
-  console.log(`🔗  API  ${device.api}`);
+  console.log(`🔗  ${t(lang, "login_api", { url: device.api })}`);
   console.log(`🌐  ${device.host}`);
   console.log(`📛  ${device.name}`);
   console.log(`🆔  ${device.id}`);

@@ -1,6 +1,6 @@
 {
   "name": "@orb44/cli",
-  "version": "0.1.36",
+  "version": "0.1.37",
   "description": "Orb44 Watch satellite — inside pulse from your VPS (load, listeners, hardening). Pairs with the street snapshot; the dashboard never runs commands on the machine.",
   "type": "module",
   "bin": {
@@ -9,6 +9,7 @@
   "files": [
     "bin/orb44.mjs",
     "server/pulse.mjs",
+    "server/runtime-eol.mjs",
     "server/sat-i18n.mjs",
     "server/cli-menu.mjs",
     "server/sat-local.mjs",

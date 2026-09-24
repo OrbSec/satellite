@@ -11,7 +11,7 @@
 | Security | [SECURITY.md](https://github.com/OrbSec/satellite/blob/main/SECURITY.md) · Cosign-signed GitHub Releases |
 | License | MIT |
 
-Node **18+**. Linux or macOS. Current release: **0.1.36**.
+Node **18+**. Linux or macOS. Current release: **0.1.37**.
 
 ## Install
 
@@ -21,7 +21,7 @@ npm’s sidebar `npm i @orb44/cli` is the library install. **Do not use it.** Th
 2. Put `orb44` on PATH (no dashboard pair yet). Root writes `/usr/local/bin/orb44`; otherwise `~/.local/bin/orb44`.
 
 ```bash
-npx @orb44/cli@0.1.36 install
+npx @orb44/cli@0.1.37 install
 hash -r
 orb44 top
 ```
@@ -40,9 +40,9 @@ Do not run bare `npx @orb44/cli` (stale cache). Do not `npm i -g @orb44/cli` wit
 Perimeter snapshot on this box — load, RAM, disk, listeners, process top. Fills the terminal. Sparklines live in RAM while `top` is open (quit = gone). No Watch, no street delta (paid dashboard).
 
 ```bash
-npx @orb44/cli@0.1.36 top
-npx @orb44/cli@0.1.36 top --interval 1
-npx @orb44/cli@0.1.36 top --once    # one frame, then exit
+npx @orb44/cli@0.1.37 top
+npx @orb44/cli@0.1.37 top --interval 1
+npx @orb44/cli@0.1.37 top --once    # one frame, then exit
 ```
 
 Keys: `q` quit · `Ctrl+C`.
@@ -50,7 +50,7 @@ Keys: `q` quit · `Ctrl+C`.
 ## Pair with the dashboard
 
 ```bash
-npx @orb44/cli@0.1.36 login
+npx @orb44/cli@0.1.37 login
 # another cabinet / local tunnel: --url http://127.0.0.1:8787
 ```
 
@@ -59,11 +59,11 @@ Open the printed link while signed into the dashboard, confirm the domain, then 
 `install` on a TTY asks: Watch daemon (default yes), error-log tail (default no), then optional read access for fail2ban / Docker / journal. **`--docker` is root on the host** (docker group). `--daemon` `--logs` `--fail2ban` `--docker` `--journal` `--access` skip those questions.
 
 ```bash
-npx @orb44/cli@0.1.36 status
-npx @orb44/cli@0.1.36 pulse
-npx @orb44/cli@0.1.36 install
+npx @orb44/cli@0.1.37 status
+npx @orb44/cli@0.1.37 pulse
+npx @orb44/cli@0.1.37 install
 orb44 update
-npx @orb44/cli@0.1.36 logout
+npx @orb44/cli@0.1.37 logout
 ```
 
 Do **not** run bare `npx @orb44/cli` — caches go stale. Pin the version or use `orb44` after install.

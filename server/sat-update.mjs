@@ -7,6 +7,7 @@ export const CLI_PACKAGE = "@orb44/cli";
 export const SAT_TREE_FILES = [
   "bin/orb44.mjs",
   "server/pulse.mjs",
+  "server/runtime-eol.mjs",
   "server/sat-i18n.mjs",
   "server/cli-menu.mjs",
   "server/sat-local.mjs",
