@@ -18,6 +18,7 @@ import {
   sanitizeRelease,
   sanitizeSecurityUpdates,
 } from "./runtime-eol.mjs";
+import { collectCheckoutFiles, sanitizeCheckoutFiles } from "./checkout-disk.mjs";
 
 const COMM_RE = /[^a-zA-Z0-9._+-]/g;
 
@@ -510,6 +511,7 @@ export function sanitizePulse(raw = {}) {
     errors: sanitizeErrors(raw.errors),
     apps: sanitizeApps(raw.apps),
     backups: sanitizeBackups(raw.backups),
+    checkoutFiles: sanitizeCheckoutFiles(raw.checkoutFiles),
   };
   return { ...base, gradeInside: gradeInside(base) };
 }
@@ -765,7 +767,7 @@ function sanitizeCliVersion(raw) {
 
 const ADMIN_PORTS = new Set([
   2019, 2375, 2376, 3306, 5432, 6379, 27017, 9200, 11211, 15672, 8500, 2379, 6443, 9090, 5601, 7474, 7687, 1080, 6432,
-  11434, 6333, 19530, 9229, 9222, 18789,
+  11434, 6333, 19530, 9229, 9222, 18789, 10050, 10051, 9093,
 ]);
 
 const MAIL_PORTS = new Set([25, 465, 587, 993, 995, 110, 143]);
@@ -808,7 +810,10 @@ const SERVICE_NAME = {
   8500: "Consul",
   8787: "туннель",
   9090: "Prometheus",
+  9093: "Alertmanager",
   9200: "Elasticsearch",
+  10050: "Zabbix agent",
+  10051: "Zabbix server",
   9222: "Chrome CDP",
   9229: "Node inspector",
   11211: "memcached",
@@ -1612,6 +1617,13 @@ function labelPort(r) {
   return svc ? `${svc} :${r.port}` : `:${r.port}`;
 }
 
+function composeBinds(rows) {
+  return [...new Set((rows || []).map((r) => Number(r.port)).filter((p) => p > 0))]
+    .sort((a, b) => a - b)
+    .map((p) => `${p}:${p} → 127.0.0.1:${p}:${p}`)
+    .join(", ");
+}
+
 export function compareInside(pulse, rec = {}, prev = null) {
   const notes = [];
   const listen = pulse?.listen || [];
@@ -1625,11 +1637,12 @@ export function compareInside(pulse, rec = {}, prev = null) {
     const held = hasStreet ? exposedAdmin.filter((r) => !streetOpen.includes(r.port)) : exposedAdmin;
     if (leaked.length) {
       const names = [...new Set(leaked.map((r) => labelPort(r)))].join(", ");
-      notes.push(insideNote("listen-leaked", "listen-leaked", { names }));
+      notes.push(insideNote("listen-leaked", "listen-leaked", { names, binds: composeBinds(leaked) }));
     }
     if (held.length) {
       const names = [...new Set(held.map((r) => labelPort(r)))].join(", ");
-      notes.push(insideNote(hasStreet ? "listen-open-held" : "listen-open", hasStreet ? "listen-open-held" : "listen-open", { names }));
+      const binds = composeBinds(held);
+      notes.push(insideNote(hasStreet ? "listen-open-held" : "listen-open", hasStreet ? "listen-open-held" : "listen-open", { names, binds }));
     }
   }
   if (pulse?.originA?.length && streetIp && !pulse.originA.includes(streetIp)) {
@@ -1638,7 +1651,8 @@ export function compareInside(pulse, rec = {}, prev = null) {
   const eol = classifyRelease(pulse?.release);
   if (eol.length) {
     const list = eol.map((i) => `${i.name} ${i.version} (${i.state})`).join(", ");
-    notes.push(insideNote("runtime-eol", "runtime-eol", { list }));
+    const rows = eol.map((i) => ({ name: i.name, version: i.version, state: i.state }));
+    notes.push(insideNote("runtime-eol", "runtime-eol", { list, rows }));
   }
   const pending = sanitizeSecurityUpdates(pulse?.securityUpdates);
   if (pending > 0) notes.push(insideNote("updates-pending", "updates-pending", { n: String(pending) }));
@@ -2122,6 +2136,13 @@ export function collectPulse(opts = {}) {
     errors: extra.errors,
     apps,
     backups,
+    checkoutFiles: (() => {
+      try {
+        return collectCheckoutFiles();
+      } catch {
+        return [];
+      }
+    })(),
   });
 }
 

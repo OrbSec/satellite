@@ -2,13 +2,13 @@
 export const INSIDE_NOTE_LANGS = ["en", "es"];
 
 const BIND_DO_EN =
-  "In docker-compose bind those services to loopback. Example: 6379:6379 → 127.0.0.1:6379:6379. Same for 5432, 7474 and the other orange labels. Then only programs on this server can connect. Orb44 will not edit the file.";
+  "In docker-compose bind these to loopback: {binds}. Then only programs on this server can connect. Orb44 will not edit the file.";
 const BIND_DO_RU =
-  "В docker-compose у этих сервисов поставьте 127.0.0.1 перед номером. Пример: было 6379:6379, нужно 127.0.0.1:6379:6379. Так же для 5432, 7474 и остальных оранжевых меток. Тогда к базе подключатся только программы на этом сервере. Orb44 файл сам не изменит.";
+  "В docker-compose привяжите к loopback именно эти порты: {binds}. Тогда подключатся только программы на этом сервере. Orb44 файл сам не изменит.";
 const BIND_DO_ES =
-  "En docker-compose ate esos servicios a loopback. Ejemplo: 6379:6379 → 127.0.0.1:6379:6379. Igual para 5432, 7474 y el resto de etiquetas naranjas. Así solo conectan programas de este servidor. Orb44 no edita el archivo.";
+  "En docker-compose ate a loopback estos puertos: {binds}. Así solo conectan programas de este servidor. Orb44 no edita el archivo.";
 const BIND_DO_KO =
-  "docker-compose에서 해당 서비스를 루프백에 묶으세요. 예: 6379:6379 → 127.0.0.1:6379:6379. 5432, 7474와 나머지 주황 표시도 같습니다. 그러면 이 서버의 프로그램만 접속합니다. Orb44는 파일을 고치지 않습니다.";
+  "docker-compose에서 이 포트만 루프백에 묶으세요: {binds}. 그러면 이 서버의 프로그램만 접속합니다. Orb44는 파일을 고치지 않습니다.";
 
 export const INSIDE_NOTES = {
   en: {
@@ -19,16 +19,16 @@ export const INSIDE_NOTES = {
     "listen-leaked": {
       title: "Service ports answer from the street",
       text: "The machine listens on {names} at 0.0.0.0, and the internet snapshot got a service banner on those ports, not an empty SYN-ACK. This is not “the firewall probably holds” — the socket is open outside.",
-      do: "Close the port on the panel firewall first and bind 127.0.0.1 in docker-compose. Orb44 does not enable the firewall or edit compose.",
+      do: "Close these on the panel firewall and bind them to loopback: {binds}. Orb44 does not enable the firewall or edit compose.",
     },
     "listen-open-held": {
-      title: "Databases listen on the server network, silent from the street",
-      text: "Right now {names} accept connections from any address on this machine. The internet snapshot got no service banner on those ports — the firewall is holding. If someone opens the port on the VPS panel, anyone can reach the database, not only your site.",
+      title: "Services listen on the server network, silent from the street",
+      text: "Right now {names} accept connections from any address on this machine. The internet snapshot got no service banner on those ports — the firewall is holding. If someone opens the port on the VPS panel, anyone can reach {names}, not only your site.",
       do: BIND_DO_EN,
     },
     "listen-open": {
-      title: "Databases listen on the whole server network",
-      text: "Right now {names} accept connections not only from programs on this machine, but from any of its network addresses. The internet may not see them: the VPS firewall is probably closed. If the port is opened, anyone can reach Redis or Postgres, not only your site.",
+      title: "Services listen on the whole server network",
+      text: "Right now {names} accept connections not only from programs on this machine, but from any of its network addresses. The internet may not see them: the VPS firewall is probably closed. If the port is opened, anyone can reach {names}, not only your site.",
       do: BIND_DO_EN,
     },
     "origin-mismatch": {
@@ -38,8 +38,8 @@ export const INSIDE_NOTES = {
     },
     "runtime-eol": {
       title: "Software on the box is past security support",
-      text: "The satellite read versions, not configs: {list}. eol means the date has passed. ending means less than half a year is left.",
-      do: "Upgrade PHP, the OS, Node, or OpenSSL on the VPS. Orb44 does not change packages.",
+      text: "The satellite read versions, not configs. eol means the date has passed. ending means less than half a year is left.",
+      do: "Upgrade the rows in the table. Orb44 does not change packages.",
     },
     "updates-pending": {
       title: "Security packages are waiting on the server",
@@ -75,9 +75,9 @@ export const INSIDE_NOTES = {
       do: "Enable ufw and fail2ban on the host. Orb44 does not install packages.",
     },
     "hardening-fw": {
-      title: "Firewall not visible",
-      text: "No enabled ufw, nftables, or firewalld. Then orange database ports are not “closed by the firewall” — they are open on the server network.",
-      do: "Enable ufw and close extra ports. Orb44 does not enable the firewall.",
+      title: "No host firewall is running",
+      text: "ufw, nftables, and firewalld are off or missing. Anything bound to 0.0.0.0 is open on this server's NIC. The hosting firewall may still drop those ports from the internet — that is a different box.",
+      do: "Turn on ufw (or nft) and allow only the ports this shop should answer on. Orb44 does not enable the firewall.",
     },
     "hardening-ban": {
       title: "No SSH brute-force protection",
@@ -115,14 +115,14 @@ export const INSIDE_NOTES = {
       do: "Mount only the paths the app needs. Orb44 does not unmount volumes.",
     },
     "hardening-image-cve": {
-      title: "A running image tag matches a known CVE",
-      text: "{names} — {cve}. Tag only, no pull and no layer scan. Pin a patched tag.",
-      do: "Bump the image tag in compose and recreate. Orb44 does not pull or rewrite compose.",
+      title: "Running image tag matches a known CVE",
+      text: "{names} — {cve}. We matched the tag name only. No image pull and no layer scan. Pin a patched tag.",
+      do: "Bump {names} in compose and recreate that container. Orb44 does not pull images or edit compose.",
     },
     "hardening-reboot": {
-      title: "Kernel is waiting for a reboot",
-      text: "/var/run/reboot-required is on disk — kernel packages landed, the machine is still on the old one.",
-      do: "Plan a reboot in a window. Orb44 does not reboot the server.",
+      title: "Kernel updated, reboot still pending",
+      text: "/var/run/reboot-required is on disk. Packages landed, this box is still on the old kernel. A known kernel hole stays open until you reboot.",
+      do: "Reboot in a maintenance window. Orb44 does not reboot the server.",
     },
     "hardening-timesync": {
       title: "Machine clock is not syncing",
@@ -176,7 +176,7 @@ export const INSIDE_NOTES = {
     "mail-relay": {
       title: "Looks like an open relay",
       text: "{kind}: mynetworks contains 0.0.0.0/0. A stranger can send spam through this box. We do not read the queue or mail.",
-      do: "In postfix, narrow mynetworks to the local net and keep reject_unauth_destination. Orb44 does not edit postconf.",
+      do: "In {kind}, narrow mynetworks to the local net and keep reject_unauth_destination. Orb44 does not edit postconf.",
     },
     "mail-relay-watch": {
       title: "Open mail relay",
@@ -198,7 +198,7 @@ export const INSIDE_NOTES = {
     "mail-open": {
       title: "Mail listens on the street without a jail",
       text: "{kind} is open from outside ({ports}). fail2ban is there, but no mail jail. This is not proven spam — hygiene only.",
-      do: "Add a postfix/dovecot jail to fail2ban. Orb44 does not install the jail.",
+      do: "Add a {kind} jail to fail2ban. Orb44 does not install the jail.",
     },
     "mail-bans": {
       title: "fail2ban is cutting mail stuffing",
@@ -208,7 +208,7 @@ export const INSIDE_NOTES = {
     "vpn-weak": {
       title: "Old VPN on the machine",
       text: "{kind} listens on {ports}. The protocol is weak; we do not read keys or config.",
-      do: "Remove PPTP/L2TP, keep WireGuard or OpenVPN. Orb44 does not switch VPN.",
+      do: "Retire {kind}. Orb44 does not switch VPN.",
     },
     "stuck-proc": {
       title: "Processes are stuck or zombie",
@@ -294,15 +294,20 @@ export const INSIDE_NOTES = {
       text: "On this machine the satellite sees {names} (a typical path on disk). The internet snapshot did not name that CMS — a shield, another vhost, or the site in front is different.",
       do: "Check that the satellite is on the origin that serves this hostname. Orb44 does not read wp-config.",
     },
+    "street-dns-label": {
+      title: "Wildcard names, nothing listens",
+      text: "{names} resolve because * answers every label. No process, no listener, no container for them on this host.",
+      do: "Fix the wildcard record. Don't file a ticket for software that isn't here.",
+    },
     "failed-unit": {
-      title: "A systemd unit failed",
-      text: "{units} failed to start.",
-      do: "On the machine: systemctl status for that unit. Orb44 does not bring it up.",
+      title: "A systemd unit failed to start",
+      text: "{units} is in failed state. That job is not running — refresh, backup, or whatever it was supposed to do is not happening.",
+      do: "On the box: systemctl status {units} and journalctl -u {units} --no-pager. Orb44 will not start it.",
     },
     "runtime-error": {
       title: "Errors on the machine",
       text: "{line}",
-      do: "This is a journal / docker / kubectl / nginx tail you allowed at login. Orb44 does not fix it.",
+      do: "This is a log tail you allowed at login. Orb44 does not fix it.",
     },
     "pulse-stale": {
       title: "The agent on the server went quiet",
@@ -317,16 +322,16 @@ export const INSIDE_NOTES = {
     "listen-leaked": {
       title: "Служебные порты отвечают и с улицы",
       text: "Машина слушает {names} на 0.0.0.0, и снимок с интернета на тех же портах получил ответ сервиса, не пустой SYN-ACK. Это уже не «файрвол, скорее всего, держит» — сокет открыт снаружи.",
-      do: "Сначала закройте порт на файрволе панели и в docker-compose поставьте 127.0.0.1 перед номером. Orb44 файрвол сам не включает и compose не правит.",
+      do: "Закройте эти порты на файрволе панели и привяжите их к loopback: {binds}. Orb44 файрвол сам не включает и compose не правит.",
     },
     "listen-open-held": {
-      title: "Базы слушают сеть сервера, с улицы молчат",
-      text: "Сейчас {names} принимают подключения с любого сетевого адреса этой машины. Снимок с интернета на этих портах не получил баннер сервиса — файрвол держит. Если порт откроют в панели VPS, до базы доберётся любой, не только ваш сайт.",
+      title: "Сервисы слушают сеть сервера, с улицы молчат",
+      text: "Сейчас {names} принимают подключения с любого сетевого адреса этой машины. Снимок с интернета на этих портах не получил баннер сервиса — файрвол держит. Если порт откроют в панели VPS, до {names} доберётся любой, не только ваш сайт.",
       do: BIND_DO_RU,
     },
     "listen-open": {
-      title: "Базы слушают всю сеть сервера",
-      text: "Сейчас {names} принимают подключения не только с программ на этой машине, а с любого её сетевого адреса. Из интернета их может быть не видно: файрвол на VPS эти порты, скорее всего, закрывает. Если порт откроют — до Redis или Postgres доберётся любой, не только ваш сайт.",
+      title: "Сервисы слушают всю сеть сервера",
+      text: "Сейчас {names} принимают подключения не только с программ на этой машине, а с любого её сетевого адреса. Из интернета их может быть не видно: файрвол на VPS эти порты, скорее всего, закрывает. Если порт откроют, до {names} доберётся любой, не только ваш сайт.",
       do: BIND_DO_RU,
     },
     "origin-mismatch": {
@@ -336,8 +341,8 @@ export const INSIDE_NOTES = {
     },
     "runtime-eol": {
       title: "На ящике софт без обновлений безопасности",
-      text: "Сателлит прочитал версии, не конфиги: {list}. eol — срок уже прошёл. ending — до конца поддержки меньше полугода.",
-      do: "Обновите PHP, ОС, Node или OpenSSL на VPS. Orb44 пакеты сам не меняет.",
+      text: "Сателлит прочитал версии, не конфиги. eol — срок уже прошёл. ending — до конца поддержки меньше полугода.",
+      do: "Обновите то, что в таблице. Orb44 пакеты сам не меняет.",
     },
     "updates-pending": {
       title: "На ящике ждут security-пакеты",
@@ -373,9 +378,9 @@ export const INSIDE_NOTES = {
       do: "Включите ufw и fail2ban. Orb44 пакеты сам не ставит.",
     },
     "hardening-fw": {
-      title: "Файрвол не виден",
-      text: "Не нашлось включённого ufw, nftables или firewalld. Тогда оранжевые порты баз — это не «закрыто файрволом», а открыто в сеть сервера.",
-      do: "Включите ufw и закройте лишние порты. Orb44 файрвол сам не включает.",
+      title: "Хостовый файрвол не запущен",
+      text: "ufw, nftables и firewalld выключены или их нет. Всё, что слушает 0.0.0.0, открыто на NIC этой машины. Файрвол хостера с интернета эти порты ещё может резать — это другой ящик.",
+      do: "Включите ufw (или nft) и оставьте только порты, на которые магазин должен отвечать. Orb44 файрвол сам не включает.",
     },
     "hardening-ban": {
       title: "Нет защиты подбора SSH",
@@ -414,13 +419,13 @@ export const INSIDE_NOTES = {
     },
     "hardening-image-cve": {
       title: "Тег запущенного образа совпадает с известной CVE",
-      text: "{names} — {cve}. Только тег, без pull и без скана слоёв. Закрепите пропатченный тег.",
-      do: "Поднимите тег в compose и пересоздайте контейнер. Orb44 образы сам не тянет и compose не правит.",
+      text: "{names} — {cve}. Сверили только имя тега. Образы не качали и слои не сканировали. Поставьте пропатченный тег.",
+      do: "Поднимите тег {names} в compose и пересоздайте этот контейнер. Orb44 образы сам не тянет и compose не правит.",
     },
     "hardening-reboot": {
-      title: "Ядро ждет перезагрузки",
-      text: "На диске есть /var/run/reboot-required — пакеты ядра встали, машина ещё на старом.",
-      do: "Запланируйте reboot в окно. Orb44 сервер сам не перезагружает.",
+      title: "Ядро обновили, reboot ещё не делали",
+      text: "На диске /var/run/reboot-required. Пакеты встали, эта машина ещё на старом ядре. Известная дыра в ядре открыта, пока не перезагрузите.",
+      do: "Перезагрузите в окно обслуживания. Orb44 сервер сам не перезагружает.",
     },
     "hardening-timesync": {
       title: "Часы машины не синхронизируются",
@@ -474,7 +479,7 @@ export const INSIDE_NOTES = {
     "mail-relay": {
       title: "Похоже на открытый релей",
       text: "{kind}: mynetworks содержит 0.0.0.0/0. Чужой может слать спам через этот ящик. Очередь и письма не читаем.",
-      do: "В postfix сузьте mynetworks до локальной сети и оставьте reject_unauth_destination. Orb44 postconf сам не правит.",
+      do: "В {kind} сузьте mynetworks до локальной сети и оставьте reject_unauth_destination. Orb44 postconf сам не правит.",
     },
     "mail-relay-watch": {
       title: "Открытый почтовый релей",
@@ -496,7 +501,7 @@ export const INSIDE_NOTES = {
     "mail-open": {
       title: "Почта слушает улицу без jail",
       text: "{kind} открыт снаружи ({ports}). fail2ban есть, но почтового jail не видно. Это не доказанный спам — только гигиена.",
-      do: "Добавьте jail postfix/dovecot в fail2ban. Orb44 jail сам не ставит.",
+      do: "Добавьте jail для {kind} в fail2ban. Orb44 jail сам не ставит.",
     },
     "mail-bans": {
       title: "fail2ban режет почтовый перебор",
@@ -506,7 +511,7 @@ export const INSIDE_NOTES = {
     "vpn-weak": {
       title: "Старый VPN на машине",
       text: "{kind} слушает {ports}. Протокол слабый, ключи и конфиг не читаем.",
-      do: "Уберите PPTP/L2TP, оставьте WireGuard или OpenVPN. Orb44 VPN сам не переключает.",
+      do: "Снимите {kind}. Orb44 VPN сам не переключает.",
     },
     "stuck-proc": {
       title: "Процессы зависли или зомби",
@@ -592,15 +597,20 @@ export const INSIDE_NOTES = {
       text: "На машине сателлит видит {names} (типичный путь на диске). Снимок с улицы эту CMS не назвал — щит, другой vhost или спереди другой сайт.",
       do: "Проверьте, что сателлит стоит на origin этого hostname. wp-config Orb44 не читает.",
     },
+    "street-dns-label": {
+      title: "Имена из звёздочки, слушать некому",
+      text: "{names} резолвятся, потому что * отвечает на любое имя. На этом хосте нет ни процесса, ни слушателя, ни контейнера.",
+      do: "Править wildcard. Не заводи тикет на софт, которого нет.",
+    },
     "failed-unit": {
-      title: "Упал systemd-юнит",
-      text: "{units} не запустился.",
-      do: "На машине: systemctl status этого юнита. Orb44 его сам не поднимает.",
+      title: "systemd-юнит не стартовал",
+      text: "{units} в failed. Эта задача не работает — refresh, бэкап или что там должно было крутиться, не крутится.",
+      do: "На ящике: systemctl status {units} и journalctl -u {units} --no-pager. Orb44 его сам не поднимает.",
     },
     "runtime-error": {
       title: "Ошибки на машине",
       text: "{line}",
-      do: "Это хвост журнала / docker / kubectl / nginx, который вы разрешили при login. Orb44 ничего не чинит.",
+      do: "Это хвост журнала, который вы разрешили при login. Orb44 ничего не чинит.",
     },
     "pulse-stale": {
       title: "Агент на сервере молчит",
@@ -615,16 +625,16 @@ export const INSIDE_NOTES = {
     "listen-leaked": {
       title: "Los puertos de servicio responden desde la calle",
       text: "La máquina escucha {names} en 0.0.0.0, y el snapshot de internet obtuvo el banner del servicio en esos puertos, no un SYN-ACK vacío. Ya no es “el firewall probablemente aguanta” — el socket está abierto fuera.",
-      do: "Cierre primero el puerto en el firewall del panel y ponga 127.0.0.1 en docker-compose. Orb44 no activa el firewall ni edita compose.",
+      do: "Cierre estos en el firewall del panel y átelos a loopback: {binds}. Orb44 no activa el firewall ni edita compose.",
     },
     "listen-open-held": {
-      title: "Las bases escuchan la red del servidor, en silencio desde la calle",
-      text: "Ahora {names} aceptan conexiones desde cualquier dirección de esta máquina. El snapshot de internet no obtuvo banner en esos puertos — el firewall aguanta. Si abren el puerto en el panel del VPS, cualquiera llega a la base, no solo su sitio.",
+      title: "Servicios escuchan la red del servidor, en silencio desde la calle",
+      text: "Ahora {names} aceptan conexiones desde cualquier dirección de esta máquina. El snapshot de internet no obtuvo banner en esos puertos — el firewall aguanta. Si abren el puerto en el panel del VPS, cualquiera llega a {names}, no solo su sitio.",
       do: BIND_DO_ES,
     },
     "listen-open": {
-      title: "Las bases de datos escuchan en toda la red del servidor",
-      text: "Ahora {names} aceptan conexiones no solo de programas en esta máquina, sino de cualquier dirección de red suya. Desde internet puede no verse: el firewall del VPS suele cerrarlos. Si abren el puerto, cualquiera llega a Redis o Postgres, no solo su sitio.",
+      title: "Servicios escuchan en toda la red del servidor",
+      text: "Ahora {names} aceptan conexiones no solo de programas en esta máquina, sino de cualquier dirección de red suya. Desde internet puede no verse: el firewall del VPS suele cerrarlos. Si abren el puerto, cualquiera llega a {names}, no solo su sitio.",
       do: BIND_DO_ES,
     },
     "origin-mismatch": {
@@ -634,8 +644,8 @@ export const INSIDE_NOTES = {
     },
     "runtime-eol": {
       title: "El software del servidor ya no tiene soporte de seguridad",
-      text: "El satélite leyó versiones, no configs: {list}. eol es que la fecha ya pasó. ending es que queda menos de medio año.",
-      do: "Actualice PHP, el SO, Node u OpenSSL en el VPS. Orb44 no cambia paquetes.",
+      text: "El satélite leyó versiones, no configs. eol es que la fecha ya pasó. ending es que queda menos de medio año.",
+      do: "Actualice las filas de la tabla. Orb44 no cambia paquetes.",
     },
     "updates-pending": {
       title: "Hay paquetes de seguridad en espera",
@@ -671,9 +681,9 @@ export const INSIDE_NOTES = {
       do: "Active ufw y fail2ban en el host. Orb44 no instala paquetes.",
     },
     "hardening-fw": {
-      title: "No se ve el firewall",
-      text: "No hay ufw, nftables o firewalld activo. Entonces los puertos naranjas de bases no están “cerrados por el firewall”: están abiertos a la red del servidor.",
-      do: "Active ufw y cierre puertos de más. Orb44 no activa el firewall.",
+      title: "No hay firewall en el host",
+      text: "ufw, nftables y firewalld están apagados o no existen. Todo lo que escucha 0.0.0.0 está abierto en la NIC de este servidor. El firewall del hosting aún puede cortar esos puertos desde internet — es otra caja.",
+      do: "Active ufw (o nft) y deje solo los puertos en los que la tienda debe responder. Orb44 no activa el firewall.",
     },
     "hardening-ban": {
       title: "No hay protección ante fuerza bruta SSH",
@@ -712,13 +722,13 @@ export const INSIDE_NOTES = {
     },
     "hardening-image-cve": {
       title: "El tag de una imagen en marcha coincide con un CVE conocido",
-      text: "{names} — {cve}. Solo el tag, sin pull ni escaneo de capas. Fije un tag parcheado.",
-      do: "Suba el tag en compose y recree el contenedor. Orb44 no descarga imágenes ni reescribe compose.",
+      text: "{names} — {cve}. Solo comparamos el nombre del tag. Sin pull ni escaneo de capas. Fije un tag parcheado.",
+      do: "Suba el tag de {names} en compose y recree ese contenedor. Orb44 no descarga imágenes ni edita compose.",
     },
     "hardening-reboot": {
-      title: "El kernel espera un reinicio",
-      text: "En disco está /var/run/reboot-required — llegaron paquetes del kernel y la máquina sigue en el viejo.",
-      do: "Planifique un reboot en una ventana. Orb44 no reinicia el servidor.",
+      title: "Kernel actualizado, reboot pendiente",
+      text: "En disco está /var/run/reboot-required. Los paquetes llegaron y esta caja sigue en el kernel viejo. Un agujero conocido del kernel sigue abierto hasta el reboot.",
+      do: "Reinicie en una ventana de mantenimiento. Orb44 no reinicia el servidor.",
     },
     "hardening-timesync": {
       title: "El reloj de la máquina no se sincroniza",
@@ -772,7 +782,7 @@ export const INSIDE_NOTES = {
     "mail-relay": {
       title: "Parece un relé abierto",
       text: "{kind}: mynetworks contiene 0.0.0.0/0. Un extraño puede enviar spam por esta caja. No leemos la cola ni el correo.",
-      do: "En postfix estreche mynetworks a la red local y deje reject_unauth_destination. Orb44 no edita postconf.",
+      do: "En {kind}, estreche mynetworks a la red local y deje reject_unauth_destination. Orb44 no edita postconf.",
     },
     "mail-relay-watch": {
       title: "Relé de correo abierto",
@@ -794,7 +804,7 @@ export const INSIDE_NOTES = {
     "mail-open": {
       title: "El correo escucha la calle sin jail",
       text: "{kind} está abierto desde fuera ({ports}). Hay fail2ban, pero no se ve jail de correo. No es spam demostrado — solo higiene.",
-      do: "Añada jail postfix/dovecot en fail2ban. Orb44 no instala el jail.",
+      do: "Añada un jail de {kind} en fail2ban. Orb44 no instala el jail.",
     },
     "mail-bans": {
       title: "fail2ban corta el relleno de correo",
@@ -804,7 +814,7 @@ export const INSIDE_NOTES = {
     "vpn-weak": {
       title: "VPN viejo en la máquina",
       text: "{kind} escucha en {ports}. El protocolo es débil; no leemos claves ni config.",
-      do: "Quite PPTP/L2TP, deje WireGuard u OpenVPN. Orb44 no cambia el VPN.",
+      do: "Retire {kind}. Orb44 no cambia el VPN.",
     },
     "stuck-proc": {
       title: "Procesos colgados o zombi",
@@ -890,15 +900,20 @@ export const INSIDE_NOTES = {
       text: "En esta máquina el satélite ve {names} (una ruta típica en disco). La captura de internet no nombró ese CMS — un escudo, otro vhost, o el sitio de delante es otro.",
       do: "Compruebe que el satélite está en el origin de este hostname. Orb44 no lee wp-config.",
     },
+    "street-dns-label": {
+      title: "Nombres del wildcard, nadie escucha",
+      text: "{names} resuelven porque * responde a cualquier etiqueta. En este host no hay proceso, listener ni contenedor.",
+      do: "Arregle el registro wildcard. No abra ticket por software que no está.",
+    },
     "failed-unit": {
-      title: "Falló una unidad systemd",
-      text: "{units} no arrancó.",
-      do: "En la máquina: systemctl status de esa unidad. Orb44 no la levanta.",
+      title: "Una unidad systemd no arrancó",
+      text: "{units} está en failed. Ese trabajo no corre — refresh, backup o lo que fuera ya no ocurre.",
+      do: "En la caja: systemctl status {units} y journalctl -u {units} --no-pager. Orb44 no la levanta.",
     },
     "runtime-error": {
       title: "Errores en la máquina",
       text: "{line}",
-      do: "Es la cola de journal / docker / kubectl / nginx que permitió al hacer login. Orb44 no lo repara.",
+      do: "Es la cola de log que permitió al hacer login. Orb44 no lo repara.",
     },
     "pulse-stale": {
       title: "El agente del servidor calló",
@@ -913,16 +928,16 @@ export const INSIDE_NOTES = {
     "listen-leaked": {
       title: "서비스 포트가 밖에서도 응답합니다",
       text: "머신이 {names}를 0.0.0.0에서 듣고, 인터넷 스냅샷이 빈 SYN-ACK가 아니라 그 포트의 서비스 배너를 받았습니다. 이제 “방화벽이 막을 것”이 아닙니다 — 소켓이 밖으로 열려 있습니다.",
-      do: "먼저 패널 방화벽에서 포트를 닫고 docker-compose에 127.0.0.1을 붙이세요. Orb44는 방화벽을 켜지 않고 compose도 고치지 않습니다.",
+      do: "패널 방화벽에서 이 포트를 닫고 루프백에 묶으세요: {binds}. Orb44는 방화벽을 켜지 않고 compose도 고치지 않습니다.",
     },
     "listen-open-held": {
-      title: "DB가 서버 네트워크를 수신, 밖에서는 조용함",
-      text: "지금 {names}가 이 머신의 아무 주소에서나 연결을 받습니다. 인터넷 스냅샷은 그 포트에서 서비스 배너를 못 받았습니다 — 방화벽이 막고 있습니다. VPS 패널에서 포트를 열면 사이트만이 아니라 누구나 DB에 닿습니다.",
+      title: "서비스가 서버 네트워크를 수신하고, 밖에서는 조용합니다",
+      text: "지금 {names}가 이 머신의 아무 주소에서나 연결을 받습니다. 인터넷 스냅샷은 그 포트에서 서비스 배너를 못 받았습니다 — 방화벽이 막고 있습니다. VPS 패널에서 포트를 열면 사이트만이 아니라 누구나 {names}에 닿습니다.",
       do: BIND_DO_KO,
     },
     "listen-open": {
-      title: "데이터베이스가 서버 네트워크 전체를 수신합니다",
-      text: "지금 {names}가 이 머신 위 프로그램만이 아니라 모든 네트워크 주소에서 연결을 받습니다. 인터넷에서는 안 보일 수 있습니다: VPS 방화벽이 보통 닫습니다. 포트를 열면 Redis나 Postgres에 사이트만이 아니라 누구나 닿습니다.",
+      title: "서비스가 서버 네트워크 전체를 수신합니다",
+      text: "지금 {names}가 이 머신 위 프로그램만이 아니라 모든 네트워크 주소에서 연결을 받습니다. 인터넷에서는 안 보일 수 있습니다: VPS 방화벽이 보통 닫습니다. 포트를 열면 사이트만이 아니라 누구나 {names}에 닿습니다.",
       do: BIND_DO_KO,
     },
     "origin-mismatch": {
@@ -932,8 +947,8 @@ export const INSIDE_NOTES = {
     },
     "runtime-eol": {
       title: "서버 소프트웨어가 보안 지원을 넘겼습니다",
-      text: "위성이 설정이 아니라 버전을 읽었습니다: {list}. eol은 날짜가 지났다는 뜻입니다. ending은 지원 종료까지 반년이 안 남았습니다.",
-      do: "VPS의 PHP, OS, Node, OpenSSL을 올리세요. Orb44는 패키지를 바꾸지 않습니다.",
+      text: "위성이 설정이 아니라 버전을 읽었습니다. eol은 날짜가 지났다는 뜻입니다. ending은 지원 종료까지 반년이 안 남았습니다.",
+      do: "표에 있는 것을 올리세요. Orb44는 패키지를 바꾸지 않습니다.",
     },
     "updates-pending": {
       title: "서버에 보안 패키지가 대기 중입니다",
@@ -969,9 +984,9 @@ export const INSIDE_NOTES = {
       do: "호스트에서 ufw와 fail2ban을 켜세요. Orb44는 패키지를 설치하지 않습니다.",
     },
     "hardening-fw": {
-      title: "방화벽이 보이지 않음",
-      text: "켜진 ufw, nftables, firewalld가 없습니다. 그러면 주황 DB 포트는 “방화벽이 닫음”이 아니라 서버 네트워크에 열린 것입니다.",
-      do: "ufw를 켜고 여분 포트를 닫으세요. Orb44는 방화벽을 켜지 않습니다.",
+      title: "호스트 방화벽이 안 돌아감",
+      text: "ufw, nftables, firewalld가 꺼져 있거나 없습니다. 0.0.0.0에 묶인 것은 이 서버 NIC에 열려 있습니다. 호스팅 방화벽이 인터넷에서 그 포트를 아직 막을 수 있습니다 — 그건 다른 상자입니다.",
+      do: "ufw(또는 nft)를 켜고 이 상점이 응답해야 하는 포트만 남기세요. Orb44는 방화벽을 켜지 않습니다.",
     },
     "hardening-ban": {
       title: "SSH 대입 보호가 없음",
@@ -1010,13 +1025,13 @@ export const INSIDE_NOTES = {
     },
     "hardening-image-cve": {
       title: "실행 중 이미지 태그가 알려진 CVE와 맞음",
-      text: "{names} — {cve}. 태그만, pull 없고 레이어 스캔 없음. 패치된 태그를 고정하세요.",
-      do: "compose에서 태그를 올리고 컨테이너를 다시 만드세요. Orb44는 이미지를 받지 않고 compose를 고치지 않습니다.",
+      text: "{names} — {cve}. 태그 이름만 맞췄습니다. pull 없고 레이어 스캔 없습니다. 패치된 태그를 고정하세요.",
+      do: "compose에서 {names} 태그를 올리고 그 컨테이너를 다시 만드세요. Orb44는 이미지를 받지 않고 compose를 고치지 않습니다.",
     },
     "hardening-reboot": {
-      title: "커널이 재부팅을 기다림",
-      text: "디스크에 /var/run/reboot-required가 있습니다 — 커널 패키지는 올라갔고 머신은 아직 옛것입니다.",
-      do: "점검 창에 reboot를 잡으세요. Orb44는 서버를 재부팅하지 않습니다.",
+      title: "커널은 올렸고, 재부팅은 아직",
+      text: "디스크에 /var/run/reboot-required가 있습니다. 패키지는 들어왔고 이 박스는 아직 옛 커널입니다. 재부팅 전까지 알려진 커널 구멍이 열려 있습니다.",
+      do: "점검 창에 재부팅을 잡으세요. Orb44는 서버를 재부팅하지 않습니다.",
     },
     "hardening-timesync": {
       title: "머신 시계가 동기화되지 않음",
@@ -1070,7 +1085,7 @@ export const INSIDE_NOTES = {
     "mail-relay": {
       title: "열린 릴레이로 보임",
       text: "{kind}: mynetworks에 0.0.0.0/0이 있습니다. 남이 이 상자로 스팸을 보낼 수 있습니다. 큐와 메일은 읽지 않습니다.",
-      do: "postfix에서 mynetworks를 로컬 망으로 줄이고 reject_unauth_destination을 두세요. Orb44는 postconf를 고치지 않습니다.",
+      do: "{kind}에서 mynetworks를 로컬 망으로 줄이고 reject_unauth_destination을 두세요. Orb44는 postconf를 고치지 않습니다.",
     },
     "mail-relay-watch": {
       title: "열린 메일 릴레이",
@@ -1092,7 +1107,7 @@ export const INSIDE_NOTES = {
     "mail-open": {
       title: "메일이 jail 없이 밖을 수신",
       text: "{kind}가 밖에서 열려 있습니다 ({ports}). fail2ban은 있는데 메일 jail이 안 보입니다. 입증된 스팸이 아니라 위생입니다.",
-      do: "fail2ban에 postfix/dovecot jail을 넣으세요. Orb44는 jail을 설치하지 않습니다.",
+      do: "fail2ban에 {kind} jail을 넣으세요. Orb44는 jail을 설치하지 않습니다.",
     },
     "mail-bans": {
       title: "fail2ban이 메일 대입을 자름",
@@ -1102,7 +1117,7 @@ export const INSIDE_NOTES = {
     "vpn-weak": {
       title: "머신에 옛 VPN",
       text: "{kind}가 {ports}에서 수신합니다. 프로토콜이 약하고 키와 설정은 읽지 않습니다.",
-      do: "PPTP/L2TP를 빼고 WireGuard나 OpenVPN을 두세요. Orb44는 VPN을 바꾸지 않습니다.",
+      do: "{kind}를 내리세요. Orb44는 VPN을 바꾸지 않습니다.",
     },
     "stuck-proc": {
       title: "프로세스가 멈추거나 좀비",
@@ -1188,15 +1203,20 @@ export const INSIDE_NOTES = {
       text: "이 머신에서 새틀라이트가 {names}를 봅니다(디스크의 전형적인 경로). 인터넷 스냅샷은 그 CMS를 부르지 않았습니다 — 실드, 다른 vhost, 또는 앞의 사이트가 다릅니다.",
       do: "새틀라이트가 이 호스트명의 origin에 있는지 확인하세요. Orb44는 wp-config를 읽지 않습니다.",
     },
+    "street-dns-label": {
+      title: "와일드카드 이름, 리스너 없음",
+      text: "{names}가 풀리는 건 *가 모든 라벨에 답하기 때문입니다. 이 호스트에 프로세스·리스너·컨테이너가 없습니다.",
+      do: "와일드카드 레코드를 고치세요. 없는 소프트웨어로 티켓을 만들지 마세요.",
+    },
     "failed-unit": {
-      title: "systemd 유닛이 실패함",
-      text: "{units}가 시작되지 않았습니다.",
-      do: "머신에서: 그 유닛의 systemctl status. Orb44는 올리지 않습니다.",
+      title: "systemd 유닛이 시작에 실패함",
+      text: "{units}가 failed 상태입니다. 그 작업은 돌지 않습니다 — refresh, 백업, 무엇이든 해야 할 일이 안 됩니다.",
+      do: "박스에서: systemctl status {units} 그리고 journalctl -u {units} --no-pager. Orb44는 올리지 않습니다.",
     },
     "runtime-error": {
       title: "머신의 오류",
       text: "{line}",
-      do: "로그인 때 허용한 journal / docker / kubectl / nginx 꼬리입니다. Orb44는 고치지 않습니다.",
+      do: "로그인 때 허용한 로그 꼬리입니다. Orb44는 고치지 않습니다.",
     },
     "pulse-stale": {
       title: "서버 에이전트가 조용함",
