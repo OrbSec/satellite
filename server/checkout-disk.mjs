@@ -8,7 +8,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 const HASH_BYTES = 65536;
-const MAX_FILES = 8;
+const MAX_FILES = 16;
+const MAX_PER_ROOT = 4;
 const MAX_DEPTH = 4;
 const MAX_PER_DIR = 40;
 const MAX_FILE_BYTES = 2_000_000;
@@ -38,17 +39,47 @@ export function hashCheckoutBody(buf) {
   return crypto.createHash("sha256").update(text).digest("hex");
 }
 
+function nginxRootOk(p) {
+  return p && !p.includes("..") && /^\/(?:var|home|usr|opt|srv)\//.test(p);
+}
+
+function nginxHostOk(h) {
+  return /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)+$/.test(h);
+}
+
 export function parseNginxRoots(text) {
+  return parseNginxSites(text).map((s) => s.root);
+}
+
+/** `server_name` sitting above a `root` in the same nginx file. No full config dump. */
+export function parseNginxSites(text) {
+  const src = String(text || "");
   const out = [];
   const re = /(?:^|\n)\s*root\s+(\/[^;\s]+)\s*;/g;
   let m;
-  while ((m = re.exec(String(text || "")))) {
-    const p = m[1].replace(/\/+$/, "");
-    if (p.includes("..")) continue;
-    if (!/^\/(?:var|home|usr|opt|srv)\//.test(p)) continue;
-    out.push(p);
+  while ((m = re.exec(src))) {
+    const root = m[1].replace(/\/+$/, "");
+    if (!nginxRootOk(root)) continue;
+    const back = src.slice(Math.max(0, m.index - 800), m.index);
+    const names = [...back.matchAll(/server_name\s+([^;{]+);/g)].pop();
+    const hosts = [];
+    if (names) {
+      for (const part of names[1].trim().split(/\s+/)) {
+        const h = part.toLowerCase().replace(/\.$/, "");
+        if (!nginxHostOk(h) || hosts.includes(h)) continue;
+        hosts.push(h);
+        if (hosts.length >= 4) break;
+      }
+    }
+    const prev = out.find((s) => s.root === root);
+    if (prev) {
+      for (const h of hosts) if (!prev.hosts.includes(h)) prev.hosts.push(h);
+    } else {
+      out.push({ root, hosts });
+    }
+    if (out.length >= 8) break;
   }
-  return [...new Set(out)].slice(0, 8);
+  return out;
 }
 
 export function sanitizeCheckoutFiles(raw) {
@@ -59,11 +90,16 @@ export function sanitizeCheckoutFiles(raw) {
     if (out.length >= MAX_FILES) break;
     const p = String(row?.path || "");
     const sha = String(row?.sha256 || "").toLowerCase();
+    const hostRaw = String(row?.host || "").toLowerCase().replace(/\.$/, "");
+    const host = hostRaw && nginxHostOk(hostRaw) ? hostRaw : "";
     if (!/^\/[A-Za-z0-9._~/-]{1,180}$/.test(p) || p.includes("..") || !CHECKOUT_JS_RE.test(p)) continue;
     if (!/^[0-9a-f]{64}$/.test(sha)) continue;
-    if (seen.has(p)) continue;
-    seen.add(p);
-    out.push({ path: p, sha256: sha });
+    const key = `${host}|${p}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const item = { path: p, sha256: sha };
+    if (host) item.host = host;
+    out.push(item);
   }
   return out;
 }
@@ -122,26 +158,49 @@ export function collectCheckoutFiles(io = {}) {
       }
     });
   const readFile = io.readFile || readHead;
-  const roots = new Set(DEFAULT_ROOTS);
+  const siteRoots = [];
+  function addRoot(root, hosts) {
+    const hit = siteRoots.find((s) => s.root === root);
+    if (hit) {
+      for (const h of hosts || []) if (!hit.hosts.includes(h) && hit.hosts.length < 4) hit.hosts.push(h);
+      return;
+    }
+    if (siteRoots.length >= 8) return;
+    siteRoots.push({ root, hosts: (hosts || []).slice(0, 4) });
+  }
   const nginxFiles = io.nginxFiles || defaultNginxFiles(exists, readdir);
   for (const cfg of nginxFiles) {
-    for (const root of parseNginxRoots(readText(cfg))) roots.add(root);
+    for (const site of parseNginxSites(readText(cfg))) addRoot(site.root, site.hosts);
   }
+  for (const root of DEFAULT_ROOTS) addRoot(root, []);
   const found = [];
   const seen = new Set();
-  for (const root of roots) {
+  for (const site of siteRoots) {
     if (found.length >= MAX_FILES) break;
     try {
-      if (!exists(root)) continue;
+      if (!exists(site.root)) continue;
     } catch {
       continue;
     }
-    walk(root, root, 0);
+    walk(site.root, site.root, 0, site.hosts, { n: 0 });
   }
   return found;
 
-  function walk(root, dir, depth) {
-    if (found.length >= MAX_FILES || depth > MAX_DEPTH) return;
+  function pushFile(rel, sha, hosts) {
+    const names = hosts && hosts.length ? hosts : [""];
+    for (const host of names) {
+      if (found.length >= MAX_FILES) return;
+      const key = `${host}|${rel}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const item = { path: rel.slice(0, 180), sha256: sha };
+      if (host) item.host = host;
+      found.push(item);
+    }
+  }
+
+  function walk(root, dir, depth, hosts, budget) {
+    if (found.length >= MAX_FILES || budget.n >= MAX_PER_ROOT || depth > MAX_DEPTH) return;
     let ents = [];
     try {
       ents = readdir(dir);
@@ -160,11 +219,11 @@ export function collectCheckoutFiles(io = {}) {
       if (!rel.startsWith("/") || rel.includes("..")) continue;
       const isDir = typeof ent === "string" ? false : Boolean(ent.isDirectory?.());
       if (isDir) {
-        walk(root, abs, depth + 1);
+        walk(root, abs, depth + 1, hosts, budget);
         continue;
       }
       if (!CHECKOUT_JS_RE.test(rel)) continue;
-      if (seen.has(rel)) continue;
+      if (budget.n >= MAX_PER_ROOT) return;
       let buf = null;
       try {
         buf = readFile(abs);
@@ -173,8 +232,8 @@ export function collectCheckoutFiles(io = {}) {
       }
       const sha = hashCheckoutBody(buf);
       if (!sha) continue;
-      seen.add(rel);
-      found.push({ path: rel.slice(0, 180), sha256: sha });
+      budget.n += 1;
+      pushFile(rel, sha, hosts);
     }
   }
 }
@@ -214,9 +273,15 @@ function diskMatch(pathname, files) {
  * disk — disk file changed, the page still serves the previous disk body.
  * split — they disagree and the previous pulse does not say which side moved.
  */
-export function pairCheckoutDisk({ host, rows = [], files = [], prevFiles = [] } = {}) {
-  const disks = sanitizeCheckoutFiles(files);
-  const prev = new Map(sanitizeCheckoutFiles(prevFiles).map((f) => [f.path, f.sha256]));
+function fileApplies(file, host, primaryHost) {
+  if (file.host) return firstPartyHost(file.host, host);
+  if (!primaryHost) return true;
+  return firstPartyHost(primaryHost, host);
+}
+
+export function pairCheckoutDisk({ host, primaryHost, rows = [], files = [], prevFiles = [] } = {}) {
+  const disks = sanitizeCheckoutFiles(files).filter((f) => fileApplies(f, host, primaryHost));
+  const prev = new Map(sanitizeCheckoutFiles(prevFiles).filter((f) => fileApplies(f, host, primaryHost)).map((f) => [`${f.host || ""}|${f.path}`, f.sha256]));
   const hits = [];
   for (const row of rows || []) {
     const street = String(row?.sha256Full || "").toLowerCase();
@@ -227,7 +292,7 @@ export function pairCheckoutDisk({ host, rows = [], files = [], prevFiles = [] }
     if (!CHECKOUT_JS_RE.test(pathname)) continue;
     const disk = diskMatch(pathname, disks);
     if (!disk) continue;
-    const D0 = prev.get(disk.path) || null;
+    const D0 = prev.get(`${disk.host || ""}|${disk.path}`) || null;
     let verdict = "same";
     if (street !== disk.sha256) {
       if (D0 && disk.sha256 === D0) verdict = "page";
